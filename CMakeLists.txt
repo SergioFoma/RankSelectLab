@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.28)
 
 option(BUILD_TESTS "Building tests" OFF)
 
@@ -10,7 +10,7 @@ set(CMAKE_CXX_FLAGS "-O2 -Wall")
 
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(TESTS ${CMAKE_CURRENT_SOURCE_DIR}/tests)
-set(INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set(MODULES ${CMAKE_CURRENT_SOURCE_DIR}/modules)
 set(SRC_ALGORITHMS ${SRC}/algorithms)
 
 # === download utilities ====

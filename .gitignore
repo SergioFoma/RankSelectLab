@@ -1,5 +1,8 @@
 Build
 
+# Apple flags
+apple_compile.txt
+
 # Obsidian files
 *.canvas
 

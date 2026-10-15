@@ -1,14 +1,23 @@
-#ifndef INTEGER_KEYS_SET_
-#define INTEGER_KEYS_SET_
+module;
 
 #include <cstddef>
+#include <type_traits>
 
-namespace dynamic_order {
+export module integer_keys_set;
+
+import std_set_impl;
+import sorted_vector_impl;
+
+export namespace dynamic_order {
 
 template <typename T>
 class IntegerKeysSet {
-  public:
-    IntegerKeysSet() = default;
+ public:
+  IntegerKeysSet() {
+    static_assert(!std::is_const<T>::value);
+    static_assert(std::is_same<T, dynamic_order::StdSetImpl>::value ||
+                  std::is_same<T, dynamic_order::SortedVectorImpl>::value);
+  };
 
   void Insert(int key) {
     return algorithm_.Insert();
@@ -31,9 +40,3 @@ class IntegerKeysSet {
 };
 
 } // namespace dynamic_order
-
-
-
-
-
-#endif

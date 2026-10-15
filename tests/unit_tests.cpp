@@ -6,12 +6,8 @@
 //    `-.(Y).-`  ,  |  , |\.-`          | THIS FILE IS FULLY GENE - |
 //         /~/,_/~~~\,__.-`             | RATED BY AI               |
 //        ////~    // ~\\               |___________________________|
-// jgs   ==`==`   ==`   ==`
+//       ==`==`   ==`   ==`
 // ==================================================================
-
-#include "algorithms/sorted_vector_impl.hpp"
-#include "algorithms/std_set_impl.hpp"
-
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -23,7 +19,10 @@
 #include <utility>
 #include <vector>
 
-#include "prog_error.hpp"
+
+import prog_error;
+import std_set_impl;
+import sorted_vector_impl;
 
 namespace {
 

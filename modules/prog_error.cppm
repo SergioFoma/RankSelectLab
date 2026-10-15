@@ -1,10 +1,11 @@
-#ifndef PROG_ERROR_HPP_
-#define PROG_ERROR_HPP_
+module;
 
 #include <exception>
 #include <string>
 
-namespace prog_error {
+export module prog_error;
+
+export namespace prog_error {
 
 enum class ErrorCode {
   kCorrect      = 0,
@@ -37,5 +38,3 @@ class ProgError : public std::exception {
   ErrorInfo error_info_;
 };
 } // namespace prog_except
-
-#endif

@@ -1,10 +1,11 @@
-#ifndef STD_SET_IMPL_
-#define STD_SET_IMPL_
+module;
 
 #include <set>
 #include <cstddef>
 
-namespace dynamic_order {
+export module std_set_impl;
+
+export namespace dynamic_order {
 
 class StdSetImpl {
  public:
@@ -26,4 +27,3 @@ class StdSetImpl {
 };
 } // namespace dynamic_order
 
-#endif

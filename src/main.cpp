@@ -1,6 +1,7 @@
 #include <iostream>
 
-#include "algorithms/std_set_impl.hpp"
+import integer_keys_set;
+import std_set_impl;
 
 int main() {
 

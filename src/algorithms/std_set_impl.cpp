@@ -1,7 +1,12 @@
+module;
+
+#include <cstddef>
+#include <memory>
 #include <utility>
 
-#include "algorithms/std_set_impl.hpp"
-#include "prog_error.hpp"
+module std_set_impl;
+
+import prog_error;
 
 void dynamic_order::StdSetImpl::Insert(int key) {
   keys_.insert(key);

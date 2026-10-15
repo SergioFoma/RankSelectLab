@@ -1,17 +1,18 @@
-#ifndef SORTED_VECTOR_IMPL_
-#define SORTED_VECTOR_IMPL_
+module;
 
 #include <vector>
 #include <cstddef>
 
-namespace dynamic_order {
+export module sorted_vector_impl;
+
+export namespace dynamic_order {
 
 class SortedVectorImpl {
  public:
   SortedVectorImpl() = default;
 
   explicit SortedVectorImpl(std::vector<int>&& keys);
-  
+
   void Insert(int key);
 
   size_t Query(int left, int right);
@@ -33,6 +34,3 @@ class SortedVectorImpl {
 
 };
 } // namespace dynamic_order
-
-
-#endif

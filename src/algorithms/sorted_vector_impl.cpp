@@ -1,9 +1,14 @@
-#include <tbb/parallel_sort.h>
+module;
+
+#include <cstddef>
 #include <algorithm>
 #include <memory>
 
-#include "algorithms/sorted_vector_impl.hpp"
-#include "prog_error.hpp"
+#include <tbb/parallel_sort.h>
+
+module sorted_vector_impl;
+
+import prog_error;
 
 dynamic_order::SortedVectorImpl::SortedVectorImpl(std::vector<int>&& keys)
    : sorted_keys_(std::move(keys)) {
