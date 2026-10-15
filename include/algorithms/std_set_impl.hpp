@@ -10,6 +10,9 @@ class StdSetImpl {
  public:
   StdSetImpl() = default;
 
+  explicit StdSetImpl(std::set<int>&& keys)
+    : keys_(std::move(keys)) {}
+
   void Insert(int key);
 
   size_t Query(int left, int right) const;

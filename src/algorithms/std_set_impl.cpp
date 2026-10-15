@@ -9,6 +9,10 @@ void dynamic_order::StdSetImpl::Insert(int key) {
 
 size_t dynamic_order::StdSetImpl::Query(int left, int right) const {
 
+  if (left >= right) {
+    return 0;
+  }
+
   size_t counter = 0;
   auto lower_bound = keys_.upper_bound(left);
 
@@ -24,7 +28,7 @@ int dynamic_order::StdSetImpl::Min(size_t index) const {
   if (index == 0 || index > keys_.size()) {
     prog_error::ErrorInfo err_info = {prog_error::ErrorCode::kOutOfRange,
                                       "Incorrect index!",
-                                      "dynamic_order::StdSetImpl"};
+                                      "dynamic_order::StdSetImpl::Min"};
     throw prog_error::ProgError(std::move(err_info));
   }
 

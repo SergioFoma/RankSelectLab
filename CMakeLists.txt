@@ -21,6 +21,8 @@ FetchContent_Declare(
 )
 
 find_package(GTest)
+find_package(TBB REQUIRED)
+
 if (${BUILD_TESTS} AND NOT GTest_FOUND)
   FetchContent_MakeAvailable(googletest)
 endif()
