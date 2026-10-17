@@ -8,24 +8,17 @@ export module avl_tree_impl;
 
 export namespace dynamic_order {
 
-enum class InsertStatus {
-  kFound,
-  kInserted,
-  kBalanced
-};
-
 struct Node {
   Node* left_ = nullptr;
   Node* right_ = nullptr;
-  size_t height_ = 0;
-  size_t subtree_size_ = 0;
+  size_t left_subtree_sz_ = 0;
+  size_t right_subtree_sz_ = 0;
+  size_t height_;
   int key_;
 
-  explicit Node(int key = 0, size_t height = 0)
+  explicit Node(int key = 0, size_t height = 1)
     : height_(height), key_(key) {}
 };
-
-using search_pair = std::pair<Node*, InsertStatus>;
 
 class AvlTreeImpl {
  public:
@@ -33,11 +26,11 @@ class AvlTreeImpl {
 
   void Insert(int key);
 
-  //size_t Query(int left, int right);
+  size_t Query(int left, int right) const;
 
-  //int Min(size_t index);
+  int Min(size_t index) const;
 
-  //size_t LessKeysCounter(int key);
+  size_t LessKeysCounter(int key) const;
 
   ~AvlTreeImpl() {
     for (auto* node_ptr: nodes_ptr_) {
@@ -47,25 +40,35 @@ class AvlTreeImpl {
  private:
   Node* root_ = nullptr;
   std::vector<Node*> nodes_ptr_;
-  size_t size_ = 0;
+  size_t sz_ = 0;
 
-  static constexpr bool kLeft = true;
-  static constexpr bool kRight = false;
+  static constexpr size_t kZeroHeight = 0;
+  static constexpr size_t kZeroSubtreeSz = 0;
+  static constexpr int kPositiveDelta = 2;
+  static constexpr int kNegativeDelta = -2;
 
-  search_pair FindAndInsert(Node* current_node,
-                           int key, size_t parent_height);
+  Node* InsertNode(Node* parent, int key);
 
-  dynamic_order::search_pair
-  HeightChecking(search_pair& search_pair, Node* parent, bool node_type);
+  Node* Find(Node* parent, int key) const;
 
-  size_t ReceiveHeight(Node* node);
+  int FindMin(Node* node, size_t ind, size_t& current_ind) const;
 
-  void BalanceTree(Node* perent, Node* left, Node* right, bool node_type);
+  Node* FindLess(Node* node, int key, size_t& counter) const;
 
-  void SmallLeftRotation(Node* parent, Node* left, Node* right);
-  void BigLeftRotation(Node* parent, Node* left, Node* right);
+  size_t GetHeight(const Node* node) const;
 
-  void SmallRightRotation(Node* parent, Node* left, Node* right);
-  void BigRightRotation(Node* parent, Node* left, Node* right);
+  int GetBalanceFactor(const Node* parent) const;
+
+  void FixHeight(Node* node);
+
+  size_t GetSubtreeSz(Node* node) const;
+
+  void FixSubtreeSz(Node* node);
+
+  Node* BalanceTree(Node* node);
+
+  Node* SmallLeftRotation(Node* p);
+  Node* SmallRightRotation(Node* p);
+
 };
-} // namespace dynamic_order
+} // namespace dynamic_order;

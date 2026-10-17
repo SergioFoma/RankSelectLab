@@ -3,6 +3,7 @@ module;
 #include <cstddef>
 #include <cassert>
 #include <algorithm>
+#include <utility>
 
 module avl_tree_impl;
 
@@ -10,208 +11,270 @@ import prog_error;
 
 void dynamic_order::AvlTreeImpl::Insert(int key) {
 
-  if (size_ == 0) {
-    root_ = new Node(key);
-    nodes_ptr_.push_back(root_);
-    ++size_;
-    return ;
-  }
-
-  Node* current_node = root_;
-  if (key < current_node->key_) {
-    FindAndInsert(current_node->left_, key, current_node->height_);
-  } else if (key > current_node->key_) {
-    FindAndInsert(current_node->right_, key, current_node->height_);
+  if (!Find(root_, key)) {
+    root_ = InsertNode(root_, key);
   }
 }
 
-//size_t dynamic_order::AvlTreeImpl::Query(int left, int right);
+dynamic_order::Node* dynamic_order::AvlTreeImpl::InsertNode(
+  dynamic_order::Node* parent, int key
+) {
 
-//int dynamic_order::AvlTreeImpl::Min(size_t index);
-
-//size_t dynamic_order::AvlTreeImpl::LessKeysCounter(int key);
-
-dynamic_order::search_pair
-dynamic_order::AvlTreeImpl::FindAndInsert(dynamic_order::Node* current_node,
-                                                 int key, size_t parent_height) {
-  if (current_node != nullptr && current_node->key_ == key) {
-    return {nullptr, dynamic_order::InsertStatus::kFound};
+  if (!parent){
+    Node* new_node = new Node(key);
+    nodes_ptr_.push_back(new_node);
+    ++sz_;
+    return new_node;
   }
 
-  if (current_node == nullptr) {
-    size_t child_height = parent_height + 1;
-    Node* child_node = new Node(key, child_height);
-    nodes_ptr_.push_back(child_node);
-    ++size_;
-    return {child_node, dynamic_order::InsertStatus::kInserted};
+  if (key < parent->key_) {
+    parent->left_ = InsertNode(parent->left_, key);
+  } else if (key > parent->key_) {
+    parent->right_ = InsertNode(parent->right_, key);
   }
 
-  if (key < current_node->key_) {
-    dynamic_order::search_pair left_child = FindAndInsert(current_node->left_,
-                                                          key, current_node->height_);
-    return HeightChecking(left_child, current_node, kLeft);
-  }
-
-  dynamic_order::search_pair right_child = FindAndInsert(current_node->right_,
-                                                         key, current_node->height_);
-  return HeightChecking(right_child, current_node, kRight);
+  return BalanceTree(parent);
 }
 
-dynamic_order::search_pair
-dynamic_order::AvlTreeImpl::HeightChecking(dynamic_order::search_pair& pair,
-                                           dynamic_order::Node* parent,
-                                           bool node_type) {
-  if (pair.second != dynamic_order::InsertStatus::kInserted) {
-    return pair;
-  }
-  if (kLeft) {
-    size_t right_height = std::max(ReceiveHeight(parent->right_),
-                                   parent->height_);
-    size_t delta = (pair.first->height_ > right_height ?
-                    pair.first->height_ - right_height :
-                    right_height - pair.first->height_);
-    if (delta > 1) {
-      BalanceTree(parent, pair.first, parent->right_, kLeft);
-    }
+dynamic_order::Node* dynamic_order::AvlTreeImpl::Find(
+  dynamic_order::Node* parent,
+  int key
+) const {
 
-    pair.second = dynamic_order::InsertStatus::kBalanced;
-    return pair;
+  if (!parent) {
+    return nullptr;
   }
 
-  size_t left_height = std::max(ReceiveHeight(parent->left_),
-                                  parent->height_);
-  size_t delta = (pair.first->height_ > left_height ?
-                  pair.first->height_ - left_height :
-                  left_height - pair.first->height_);
-  if (delta > 1) {
-    BalanceTree(parent, parent->left_, pair.first, kRight);
+  if (parent->key_ == key) {
+    return parent;
   }
 
-  pair.second = dynamic_order::InsertStatus::kBalanced;
-  return pair;
+  if (parent->key_ > key) {
+    Node* left_find_stat = Find(parent->left_, key);
+    return left_find_stat;
+  } else {
+    Node* right_find_stat = Find(parent->right_, key);
+    return right_find_stat;
+  }
+
+  std::unreachable();
 }
 
-size_t dynamic_order::AvlTreeImpl::ReceiveHeight(dynamic_order::Node* node) {
-  if (node == nullptr) {
+size_t dynamic_order::AvlTreeImpl::GetHeight(
+  const dynamic_order::Node* node
+) const {
+
+  return (node ? node->height_ : kZeroHeight);
+}
+
+int dynamic_order::AvlTreeImpl::GetBalanceFactor(
+  const dynamic_order::Node* parent
+) const {
+
+  int left_h = static_cast<int>(GetHeight(parent->left_));
+  int right_h = static_cast<int>(GetHeight(parent->right_));
+
+  return right_h - left_h;
+}
+
+void dynamic_order::AvlTreeImpl::FixHeight(
+  dynamic_order::Node* node
+) {
+
+  assert(node);
+
+  size_t left_h = GetHeight(node->left_);
+  size_t right_h = GetHeight(node->right_);
+
+  node->height_ = std::max(left_h, right_h) + 1;
+}
+
+size_t dynamic_order::AvlTreeImpl::GetSubtreeSz(
+  dynamic_order::Node* node
+) const {
+
+  return (node ?
+          node->left_subtree_sz_ + node->right_subtree_sz_ + 1:
+          kZeroSubtreeSz);
+}
+
+void dynamic_order::AvlTreeImpl::FixSubtreeSz(
+  dynamic_order::Node* node
+) {
+
+  assert(node);
+
+  node->left_subtree_sz_ = GetSubtreeSz(node->left_);
+  node->right_subtree_sz_ = GetSubtreeSz(node->right_);
+}
+
+size_t dynamic_order::AvlTreeImpl::Query(int left, int right) const {
+
+  if (left >= right) {
     return 0;
   }
 
-  size_t left_height = 0, right_height = 0;
-  if (node->left_ != nullptr) {
-    left_height = ReceiveHeight(node->left_);
-  }
-  if (node->right_ != nullptr) {
-    right_height = ReceiveHeight(node->right_);
+  size_t left_counter = 0;
+  Node* left_less = FindLess(root_, left, left_counter);
+  if (left_less && left_less->key_ == left) {
+    ++left_counter;                         //take border itself
   }
 
-  return std::max(left_height, right_height);
+  size_t right_counter = 0;
+  Node* right_less = FindLess(root_, right, right_counter);
+  if (right_less && right_less->key_ == right) {
+    ++right_counter;                        // take border itself
+  }
+
+  return right_counter - left_counter;
 }
 
-void dynamic_order::AvlTreeImpl::BalanceTree(dynamic_order::Node* parent,
-                                                 dynamic_order::Node* left,
-                                                 dynamic_order::Node* right,
-                                                 bool node_type) {
-  assert(parent);
-  assert(left);
-  assert(right);
+int dynamic_order::AvlTreeImpl::Min(size_t index) const {
 
-  if (node_type == kLeft) {
-    size_t right_left_h = std::max(ReceiveHeight(right->left_), right->height_);
-    size_t right_right_h = std::max(ReceiveHeight(right->right_), right->height_);
-
-    if (right_left_h <= right_right_h) {
-      SmallLeftRotation(parent, left, right);
-    } else {
-      BigLeftRotation(parent, left, right);
-    }
-  } else {
-    size_t left_left_h = std::max(ReceiveHeight(left->left_), left->height_);
-    size_t left_right_h = std::max(ReceiveHeight(left->right_), left->height_);
-
-    if (left_right_h <= left_left_h) {
-      SmallRightRotation(parent, left, right);
-    } else {
-      BigRightRotation(parent, left, right);
-    }
+  if (index == 0 || index > sz_) {
+    prog_error::ErrorInfo err_info = {prog_error::ErrorCode::kOutOfRange,
+                                      "Incorrect index!",
+                                      "dynamic_order::AvlTreeImpl::Min"};
+    throw prog_error::ProgError(std::move(err_info));
   }
+
+  size_t current_ind = 0;
+  return FindMin(root_, index, current_ind);
+}
+
+int dynamic_order::AvlTreeImpl::FindMin(
+  dynamic_order::Node* node,
+  size_t ind,
+  size_t& current_ind
+) const {
+
+  if (!node) {
+    return 0;
+  }
+
+  size_t old_current_ind = current_ind;
+  current_ind = current_ind + node->left_subtree_sz_ + 1;
+
+  if (current_ind == ind) {
+    return node->key_;
+  }
+
+  if (current_ind > ind) {
+    current_ind = old_current_ind;
+    return FindMin(node->left_, ind, current_ind);
+  }
+
+  return FindMin(node->right_, ind, current_ind);
+}
+
+size_t dynamic_order::AvlTreeImpl::LessKeysCounter(int key) const {
+
+  size_t counter = 0;
+  FindLess(root_, key, counter);
+
+  return counter;
+}
+
+dynamic_order::Node* dynamic_order::AvlTreeImpl::FindLess(
+  dynamic_order::Node* node,
+  int key,
+  size_t& counter
+) const {
+
+  if (!node) {
+    return nullptr;
+  }
+
+  if (node->key_ == key) {
+    counter += node->left_subtree_sz_;
+    return node;
+  }
+
+  if (node->key_ < key) {
+    counter += (node->left_subtree_sz_ + 1);
+    return FindLess(node->right_, key, counter);
+  }
+
+  return FindLess(node->left_, key, counter);
+}
+
+dynamic_order::Node* dynamic_order::AvlTreeImpl::BalanceTree(
+  dynamic_order::Node* node
+) {
+
+  assert(node);
+
+  FixHeight(node);
+  FixSubtreeSz(node);
+
+  if (GetBalanceFactor(node) == kPositiveDelta) {
+    if (GetBalanceFactor(node->right_) < 0) {
+      node->right_ = SmallRightRotation(node->right_);
+    }
+    return SmallLeftRotation(node);
+  }
+  if (GetBalanceFactor(node) == kNegativeDelta) {
+    if (GetBalanceFactor(node->left_) > 0) {
+      node->left_ = SmallLeftRotation(node->left_);
+    }
+    return SmallRightRotation(node);
+  }
+
+  return node;
 }
 
 /*
-      a                          b
+      p                          q
      / \                        / \
-    L   b          —>          a   R
+    a   q          —>          p   c
        / \                    / \
-      C   R                  L   C
+      b   c                  a   b
 */
 
-void dynamic_order::AvlTreeImpl::SmallLeftRotation(dynamic_order::Node* a,
-                                                   dynamic_order::Node* l,
-                                                   dynamic_order::Node* b) {
-  Node* c = b->left_;
+dynamic_order::Node* dynamic_order::AvlTreeImpl::SmallLeftRotation(
+  dynamic_order::Node* p
+) {
 
-  b->left_ = a;
-  a->right_ = c;
+  Node* q = p->right_;
+  Node* b = q->left_;
+
+  q->left_ = p;
+  p->right_ = b;
+
+  FixHeight(p);
+  FixSubtreeSz(p);
+
+  FixHeight(q);
+  FixSubtreeSz(q);
+
+  return q;
 }
 
 /*
-        a                                    c
-       / \                                 /   \
-      L   b                               a     b
-         / \              —>             / \   / \
-        c   R                           L   M N   R
-       / \
-      M   N
-
-*/
-void dynamic_order::AvlTreeImpl::BigLeftRotation(dynamic_order::Node* a,
-                                                 dynamic_order::Node* l,
-                                                 dynamic_order::Node* b) {
-  Node* c = b->left_;
-  Node* m = c->left_;
-  Node* n = c->right_;
-
-  a->right_ = m;
-  c->left_ = a;
-  c->right_ = b;
-  b->left_ = n;
-}
-
-/*
-        a                        b
+        p                        q
        / \                      / \
-      b   R          —>        L   a
+      q   c          —>        a   p
      / \                          / \
-    L   C                        C   R
+    a   b                        b   c
 */
 
-void dynamic_order::AvlTreeImpl::SmallRightRotation(dynamic_order::Node* a,
-                                                    dynamic_order::Node* l,
-                                                    dynamic_order::Node* b) {
-  Node* c = b->right_;
+dynamic_order::Node* dynamic_order::AvlTreeImpl::SmallRightRotation(
+  dynamic_order::Node* p
+) {
 
-  b->right_ = a;
-  a->left_ = c;
-}
+  assert(p);
 
-/*
-        a                                    c
-       / \                                 /   \
-      b   R                               b     a
-     / \                  —>             / \   / \
-    L   c                               L   M N   R
-       / \
-      M   N
-*/
+  Node* q = p->left_;
+  Node* b = q->right_;
 
-void dynamic_order::AvlTreeImpl::BigRightRotation(dynamic_order::Node* a,
-                                                  dynamic_order::Node* l,
-                                                  dynamic_order::Node* b) {
-  Node* c = b->right_;
-  Node* n = c->right_;
-  Node* m = c->left_;
+  q->right_ = p;
+  p->left_ = b;
 
-  b->right_ = m;
-  c->left_ = b;
-  c->right_ = a;
-  a->left_ = n;
+  FixHeight(p);
+  FixSubtreeSz(p);
+
+  FixHeight(q);
+  FixSubtreeSz(q);
+
+  return q;
 }
