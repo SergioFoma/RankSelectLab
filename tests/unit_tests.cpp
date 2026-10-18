@@ -24,6 +24,7 @@ import prog_error;
 import std_set_impl;
 import sorted_vector_impl;
 import avl_tree_impl;
+import b_tree_impl;
 
 namespace {
 
@@ -1042,4 +1043,793 @@ TEST(AvlTreeImplParity, AgreesWithStdSetImpl) {
   }
 }
 
+// ======================================================================
+// AvlTreeImpl — вставка одинаковых ключей
+//
+// Проверка новой функциональности: повторная вставка уже существующего
+// ключа не должна влиять ни на структуру, ни на размер дерева.
+// Размер и структура проверяются по публичному API: Min бросает
+// ProgError при index > размера, порядковые статистики, диапазонные
+// запросы Query и LessKeysCounter сверяются до и после серии
+// дублирующих вставок (в т.ч. на дереве, где новые ключи вызывают
+// балансировку).
+// ======================================================================
+
+TEST(AvlTreeImplDuplicates, ReinsertedKeyKeepsTreeSizeOne) {
+  AvlTreeImpl t;
+  t.Insert(42);
+
+  for (int i = 0; i < 10; ++i) {
+    t.Insert(42);
+    // Размер остался равен 1 после каждой повторной вставки.
+    EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), 1u);
+    EXPECT_EQ(t.Min(1), 42);
+    EXPECT_THROW(t.Min(2), ProgError);
+  }
+
+  // Семантика ключей тоже не изменилась.
+  EXPECT_EQ(t.Query(41, 42), 1u);   // правый конец включается
+  EXPECT_EQ(t.Query(42, 43), 0u);   // левый конец исключается
+  EXPECT_EQ(t.LessKeysCounter(42), 0u);
+  EXPECT_EQ(t.LessKeysCounter(43), 1u);
+}
+
+TEST(AvlTreeImplDuplicates, OnlyIdenticalKeysBuildSingleElementTree) {
+  // Набор из только одинаковых ключей: дерево обязано остаться одноэлементным.
+  const int key = 7;
+  AvlTreeImpl t;
+
+  for (int i = 0; i < 100; ++i) {
+    t.Insert(key);
+    ASSERT_EQ(t.Query(INT32_MIN, INT32_MAX), 1u) << "i = " << i;
+    ASSERT_EQ(t.Min(1), key) << "i = " << i;
+    ASSERT_THROW(t.Min(2), ProgError) << "i = " << i;  // второго элемента нет
+  }
+
+  EXPECT_EQ(t.Query(6, 7), 1u);
+  EXPECT_EQ(t.Query(7, 7), 0u);
+  EXPECT_EQ(t.Query(7, 8), 0u);
+  EXPECT_EQ(t.LessKeysCounter(7), 0u);
+  EXPECT_EQ(t.LessKeysCounter(8), 1u);
+}
+
+TEST(AvlTreeImplDuplicates, DuplicateInsertionsDoNotChangeTreeState) {
+  AvlTreeImpl t;
+  std::set<int> ref;
+  for (int key : {5, 3, 7, 1, 9}) {
+    t.Insert(key);
+    ref.insert(key);
+  }
+
+  // Снимок observable-состояния до дублирующих вставок.
+  std::vector<int> min_before;
+  for (size_t k = 1; k <= 5; ++k) {
+    min_before.push_back(t.Min(k));
+  }
+
+  // Пять полных проходов вставки уже существующих ключей:
+  // корень, внутренние узлы с одним ребёнком и листья.
+  for (int round = 0; round < 5; ++round) {
+    for (int key : {5, 3, 7, 1, 9}) {
+      t.Insert(key);
+    }
+  }
+
+  // Размер не вырос: шестой порядковой статистики нет.
+  EXPECT_THROW(t.Min(6), ProgError);
+
+  // Порядковые статистики не изменились.
+  std::vector<int> min_after;
+  for (size_t k = 1; k <= 5; ++k) {
+    min_after.push_back(t.Min(k));
+  }
+  EXPECT_EQ(min_before, min_after);
+
+  // Все диапазонные запросы и счётчики меньших ключей — как у std::set.
+  for (int a = 0; a <= 12; ++a) {
+    for (int b = a; b <= 12; ++b) {
+      EXPECT_EQ(t.Query(a, b), CountInRange(ref, a, b))
+          << "range (" << a << ", " << b << "]";
+    }
+  }
+  for (int k = 0; k <= 12; ++k) {
+    EXPECT_EQ(t.LessKeysCounter(k), CountLess(ref, k)) << "k = " << k;
+  }
+}
+
+TEST(AvlTreeImplDuplicates, DuplicatesAlongsideRebalancingInsertions) {
+  // Каждый ключ вставляется трижды: первая вставка может вызывать
+  // повороты балансировки, последующие — должны игнорироваться.
+  AvlTreeImpl t;
+  std::set<int> ref;
+  for (int k = 1; k <= 8; ++k) {
+    for (int i = 0; i < 3; ++i) {
+      t.Insert(k);
+    }
+    ref.insert(k);
+    // После каждого блока из трёх вставок размер равен числу уникальных ключей.
+    EXPECT_EQ(t.Query(0, 9), ref.size()) << "k = " << k;
+  }
+
+  EXPECT_THROW(t.Min(9), ProgError);  // размер = 8, не 24
+  for (size_t k = 1; k <= 8; ++k) {
+    EXPECT_EQ(t.Min(k), static_cast<int>(k)) << "k = " << k;
+  }
+  for (int key = 0; key <= 9; ++key) {
+    EXPECT_EQ(t.LessKeysCounter(key), CountLess(ref, key)) << "key = " << key;
+  }
+}
+
+TEST(AvlTreeImplDuplicates, NewKeyAfterDuplicatesCountedOnce) {
+  AvlTreeImpl t;
+  for (int key : {5, 3, 7, 1, 9}) {
+    t.Insert(key);
+  }
+  for (int i = 0; i < 4; ++i) {
+    t.Insert(6);  // ранее отсутствующий ключ: добавляется ровно один раз
+  }
+
+  EXPECT_EQ(t.Query(0, 10), 6u);
+  EXPECT_THROW(t.Min(7), ProgError);
+  EXPECT_EQ(t.Min(4), 6);  // {1, 3, 5, 6, 7, 9}
+  EXPECT_EQ(t.LessKeysCounter(7), 4u);  // {1, 3, 5, 6}
+}
+
+// ======================================================================
+// BTreeImpl — B-дерево с минимальной степенью t
+//
+// Эталонная семантика идентична прочим реализациям:
+//   Insert(key)            — множество, дубликаты игнорируются;
+//   Query(left, right)     — количество ключей в (left, right];
+//   Min(index)             — index-я порядковая статистика (с 1),
+//                            ProgError(kOutOfRange) при index==0 или > размера;
+//   LessKeysCounter(key)   — количество ключей строго меньше key.
+//
+// Дополнительно покрываются низкоуровневые операции BTreeNode:
+// InsertNonFull (вставка в неполный узел) и SplitChild (деление узла),
+// а также поддержка размера поддерева subtree_sz_.
+// ======================================================================
+
+using dynamic_order::BTreeImpl;
+using dynamic_order::BTreeNode;
+
+class BTreeImplTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    // Пять ключей при t = 2 гарантированно вызывают сплиты:
+    // корень-лист вмещает не более 2t - 1 = 3 ключа.
+    for (int key : {5, 3, 7, 1, 9}) {
+      tree_.Insert(key);
+    }
+  }
+
+  BTreeImpl tree_;  // t = kMinDegree = 2
+};
+
+// ------------ Пустое дерево ------------
+
+TEST(BTreeImplEmpty, QueryReturnsZero) {
+  BTreeImpl t;
+  EXPECT_EQ(t.Query(-5, 10), 0u);
+  EXPECT_EQ(t.Query(0, 0), 0u);
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), 0u);  // путь с right == INT32_MAX
+}
+
+TEST(BTreeImplEmpty, MinThrows) {
+  BTreeImpl t;
+  EXPECT_THROW(t.Min(0), ProgError);
+  EXPECT_THROW(t.Min(1), ProgError);
+}
+
+TEST(BTreeImplEmpty, LessKeysCounterReturnsZero) {
+  BTreeImpl t;
+  EXPECT_EQ(t.LessKeysCounter(0), 0u);
+  EXPECT_EQ(t.LessKeysCounter(INT32_MIN), 0u);
+  EXPECT_EQ(t.LessKeysCounter(INT32_MAX), 0u);
+}
+
+TEST(BTreeImplEmpty, FirstInsertSucceeds) {
+  BTreeImpl t;
+  t.Insert(1);
+  EXPECT_EQ(t.Query(0, 1), 1u);
+  EXPECT_EQ(t.Min(1), 1);
+}
+
+// ------------ Ошибки ------------
+
+TEST(BTreeImplErrors, ProgErrorCarriesContext) {
+  BTreeImpl t;
+  try {
+    t.Min(1);
+    FAIL() << "Ожидалось исключение ProgError";
+  } catch (const ProgError& e) {
+    EXPECT_EQ(e.GetErrorInfo().code, ErrorCode::kOutOfRange);
+    EXPECT_STREQ(e.what(), "Incorrect index!");
+    EXPECT_EQ(e.GetErrorInfo().func_name, "dynamic_order::BTreeImpl::Min");
+  } catch (const std::exception&) {
+    FAIL() << "Ожидался именно ProgError";
+  }
+}
+
+TEST(BTreeImplErrors, ProgIsStdException) {
+  BTreeImpl t;
+  EXPECT_THROW(t.Min(0), std::exception);
+}
+
+// ------------ Один элемент ------------
+
+TEST(BTreeImplSingle, Semantics) {
+  BTreeImpl t;
+  t.Insert(42);
+  EXPECT_EQ(t.Min(1), 42);
+  EXPECT_THROW(t.Min(2), ProgError);
+  EXPECT_EQ(t.Query(41, 42), 1u);   // (41,42]={42}
+  EXPECT_EQ(t.Query(42, 42), 0u);   // вырожденный диапазон пуст
+  EXPECT_EQ(t.Query(42, 43), 0u);   // 42 — левый конец
+}
+
+TEST(BTreeImplSingle, LessKeysCounterCountsIt) {
+  BTreeImpl t;
+  t.Insert(42);
+  EXPECT_EQ(t.LessKeysCounter(42), 0u);  // строго меньше 42 — ничего
+  EXPECT_EQ(t.LessKeysCounter(43), 1u);  // 42 < 43
+  EXPECT_EQ(t.LessKeysCounter(INT32_MIN), 0u);
+  EXPECT_EQ(t.LessKeysCounter(INT32_MAX), 1u);
+}
+
+TEST(BTreeImplSingle, IntMinElement) {
+  BTreeImpl t;
+  t.Insert(INT32_MIN);
+  EXPECT_EQ(t.Min(1), INT32_MIN);
+  EXPECT_EQ(t.Query(INT32_MIN, 0), 0u);  // левый конец исключается
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN), 0u);
+  EXPECT_EQ(t.LessKeysCounter(0), 1u);
+}
+
+TEST(BTreeImplSingle, IntMaxElement) {
+  BTreeImpl t;
+  t.Insert(INT32_MAX);
+  EXPECT_EQ(t.Min(1), INT32_MAX);
+  EXPECT_EQ(t.Query(INT32_MAX - 1, INT32_MAX), 1u);  // путь через subtree_sz_
+  EXPECT_EQ(t.LessKeysCounter(INT32_MAX), 0u);
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), 1u);
+}
+
+TEST(BTreeImplSingle, ReinsertedKeyKeepsTreeSizeOne) {
+  BTreeImpl t;
+  t.Insert(42);
+
+  for (int i = 0; i < 10; ++i) {
+    t.Insert(42);
+    EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), 1u);
+    EXPECT_EQ(t.Min(1), 42);
+    EXPECT_THROW(t.Min(2), ProgError);
+  }
+
+  EXPECT_EQ(t.LessKeysCounter(42), 0u);
+  EXPECT_EQ(t.LessKeysCounter(43), 1u);
+}
+
+// ------------ Дубликаты ------------
+
+TEST(BTreeImplDuplicates, OnlyIdenticalKeysBuildSingleElementTree) {
+  const int key = 7;
+  BTreeImpl t;
+  for (int i = 0; i < 100; ++i) {
+    t.Insert(key);
+    ASSERT_EQ(t.Query(INT32_MIN, INT32_MAX), 1u) << "i = " << i;
+    ASSERT_EQ(t.Min(1), key) << "i = " << i;
+    ASSERT_THROW(t.Min(2), ProgError) << "i = " << i;
+  }
+}
+
+TEST(BTreeImplDuplicates, DuplicateInsertionsDoNotChangeTreeState) {
+  BTreeImpl t;
+  std::set<int> ref;
+  for (int key : {5, 3, 7, 1, 9, 6, 4}) {
+    t.Insert(key);
+    ref.insert(key);
+  }
+
+  std::vector<int> min_before;
+  for (size_t k = 1; k <= ref.size(); ++k) {
+    min_before.push_back(t.Min(k));
+  }
+
+  // Пять полных проходов повторных вставок: ключи на разных уровнях дерева.
+  for (int round = 0; round < 5; ++round) {
+    for (int key : {5, 3, 7, 1, 9, 6, 4}) {
+      t.Insert(key);
+    }
+  }
+
+  EXPECT_THROW(t.Min(8), ProgError);  // размер не вырос
+  std::vector<int> min_after;
+  for (size_t k = 1; k <= ref.size(); ++k) {
+    min_after.push_back(t.Min(k));
+  }
+  EXPECT_EQ(min_before, min_after);
+
+  for (int a = 0; a <= 12; ++a) {
+    for (int b = a; b <= 12; ++b) {
+      EXPECT_EQ(t.Query(a, b), CountInRange(ref, a, b))
+          << "range (" << a << ", " << b << "]";
+    }
+  }
+  for (int k = 0; k <= 12; ++k) {
+    EXPECT_EQ(t.LessKeysCounter(k), CountLess(ref, k)) << "k = " << k;
+  }
+}
+
+TEST(BTreeImplDuplicates, DuplicatesAlongsideSplittingInsertions) {
+  // Каждый ключ вставляется трижды; первые вставки вызывают сплиты.
+  BTreeImpl t;
+  std::set<int> ref;
+  for (int k = 1; k <= 8; ++k) {
+    for (int i = 0; i < 3; ++i) {
+      t.Insert(k);
+    }
+    ref.insert(k);
+    EXPECT_EQ(t.Query(0, 9), ref.size()) << "k = " << k;
+  }
+
+  EXPECT_THROW(t.Min(9), ProgError);  // размер = 8, не 24
+  for (size_t k = 1; k <= 8; ++k) {
+    EXPECT_EQ(t.Min(k), static_cast<int>(k)) << "k = " << k;
+  }
+  for (int key = 0; key <= 9; ++key) {
+    EXPECT_EQ(t.LessKeysCounter(key), CountLess(ref, key)) << "key = " << key;
+  }
+}
+
+// ------------ Query на фикстуре {1,3,5,7,9} ------------
+
+TEST_F(BTreeImplTest, QueryCountsKeysInsideSegment) {
+  EXPECT_EQ(tree_.Query(2, 8), 3u);  // 3, 5, 7
+}
+
+TEST_F(BTreeImplTest, QueryCountsAllKeys) {
+  EXPECT_EQ(tree_.Query(0, 10), 5u);
+  EXPECT_EQ(tree_.Query(-1000, 1000), 5u);
+  EXPECT_EQ(tree_.Query(INT32_MIN, INT32_MAX), 5u);
+}
+
+TEST_F(BTreeImplTest, QueryLeftBoundaryIsExcluded) {
+  EXPECT_EQ(tree_.Query(5, 100), 2u);  // 7, 9 — ключ 5 НЕ считается
+  EXPECT_EQ(tree_.Query(1, 3), 1u);    // только 3
+  EXPECT_EQ(tree_.Query(3, 5), 1u);    // только 5
+}
+
+TEST_F(BTreeImplTest, QueryRightBoundaryIsIncluded) {
+  EXPECT_EQ(tree_.Query(-100, 5), 3u);  // 1, 3, 5
+  EXPECT_EQ(tree_.Query(-100, 1), 1u);
+  EXPECT_EQ(tree_.Query(8, 9), 1u);
+}
+
+TEST_F(BTreeImplTest, QueryDegenerateAndInvertedRanges) {
+  EXPECT_EQ(tree_.Query(5, 5), 0u);
+  EXPECT_EQ(tree_.Query(0, 0), 0u);
+  EXPECT_EQ(tree_.Query(7, 3), 0u);
+  EXPECT_EQ(tree_.Query(1, 0), 0u);
+  EXPECT_EQ(tree_.Query(INT32_MAX, INT32_MIN), 0u);
+}
+
+TEST_F(BTreeImplTest, QueryWhenAllKeysOutsideRange) {
+  EXPECT_EQ(tree_.Query(10, 20), 0u);
+  EXPECT_EQ(tree_.Query(9, 100), 0u);
+  EXPECT_EQ(tree_.Query(-20, 0), 0u);
+  EXPECT_EQ(tree_.Query(-20, -10), 0u);
+}
+
+TEST_F(BTreeImplTest, QueryWorksWithNegativeKeys) {
+  BTreeImpl t;
+  for (int key : {-10, -5, 0, 5}) {
+    t.Insert(key);
+  }
+  EXPECT_EQ(t.Query(-10, 5), 3u);   // -5, 0, 5
+  EXPECT_EQ(t.Query(-6, -1), 1u);   // только -5
+  EXPECT_EQ(t.Query(-10, -10), 0u);
+  EXPECT_EQ(t.Query(-9, -5), 1u);
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), 4u);
+}
+
+TEST_F(BTreeImplTest, QueryIsStableAcrossRepeatedCalls) {
+  EXPECT_EQ(tree_.Query(0, 10), 5u);
+  EXPECT_EQ(tree_.Query(0, 10), 5u);
+}
+
+// ------------ Min на фикстуре ------------
+
+TEST_F(BTreeImplTest, MinReturnsOrderStatistic) {
+  EXPECT_EQ(tree_.Min(1), 1);  // минимум
+  EXPECT_EQ(tree_.Min(2), 3);
+  EXPECT_EQ(tree_.Min(3), 5);
+  EXPECT_EQ(tree_.Min(4), 7);
+  EXPECT_EQ(tree_.Min(5), 9);  // максимум
+}
+
+TEST_F(BTreeImplTest, MinThrowsOnBadIndex) {
+  EXPECT_THROW(tree_.Min(0), ProgError);
+  EXPECT_THROW(tree_.Min(6), ProgError);
+  EXPECT_THROW(tree_.Min(100), ProgError);
+}
+
+// ------------ LessKeysCounter на фикстуре ------------
+
+TEST_F(BTreeImplTest, LessKeysCounterCountsStrictlyLess) {
+  EXPECT_EQ(tree_.LessKeysCounter(1), 0u);
+  EXPECT_EQ(tree_.LessKeysCounter(2), 1u);   // {1}
+  EXPECT_EQ(tree_.LessKeysCounter(5), 2u);   // {1, 3}
+  EXPECT_EQ(tree_.LessKeysCounter(10), 5u);  // все
+  EXPECT_EQ(tree_.LessKeysCounter(INT32_MAX), 5u);
+}
+
+TEST_F(BTreeImplTest, LessKeysCounterDoesNotCountEqualKey) {
+  EXPECT_EQ(tree_.LessKeysCounter(3), 1u);
+  EXPECT_EQ(tree_.LessKeysCounter(7), 3u);
+}
+
+TEST_F(BTreeImplTest, LessKeysCounterForVerySmallKey) {
+  EXPECT_EQ(tree_.LessKeysCounter(INT32_MIN), 0u);
+  EXPECT_EQ(tree_.LessKeysCounter(0), 0u);
+}
+
+TEST_F(BTreeImplTest, LessKeysCounterIsMonotonic) {
+  for (int k = -5; k < 15; ++k) {
+    EXPECT_GE(tree_.LessKeysCounter(k + 1), tree_.LessKeysCounter(k)) << "k=" << k;
+  }
+}
+
+// ------------ Полная сверка с std::set (хелпер) ------------
+
+// Сквозная проверка: Query на сетке, LessKeysCounter на прямой,
+// все порядковые статистики, границы размера.
+void VerifyEquivalence(const BTreeImpl& tree, const std::set<int>& ref,
+                       int lo, int hi) {
+  EXPECT_EQ(tree.Query(INT32_MIN, INT32_MAX), ref.size());
+  for (int a = lo; a <= hi; ++a) {
+    for (int b = lo; b <= hi; ++b) {
+      EXPECT_EQ(tree.Query(a, b), CountInRange(ref, a, b))
+          << "range (" << a << ", " << b << "]";
+    }
+  }
+  for (int k = lo; k <= hi; ++k) {
+    EXPECT_EQ(tree.LessKeysCounter(k), CountLess(ref, k)) << "k = " << k;
+  }
+  for (size_t k = 1; k <= ref.size(); ++k) {
+    EXPECT_EQ(tree.Min(k), *std::next(ref.begin(), static_cast<long>(k - 1)))
+        << "k = " << k;
+  }
+  EXPECT_THROW(tree.Min(ref.size() + 1), ProgError);
+}
+
+// ------------ Сценарии роста со сплитами ------------
+
+TEST(BTreeImplGrowth, SortedAscendingMatchesStdSet) {
+  BTreeImpl t;  // t = 2: сплиты начинаются с 4-го ключа
+  std::set<int> ref;
+  for (int k = 1; k <= 20; ++k) {
+    t.Insert(k);
+    ref.insert(k);
+  }
+  VerifyEquivalence(t, ref, 0, 21);
+}
+
+TEST(BTreeImplGrowth, SortedDescendingMatchesStdSet) {
+  BTreeImpl t;
+  std::set<int> ref;
+  for (int k = 20; k >= 1; --k) {
+    t.Insert(k);
+    ref.insert(k);
+  }
+  VerifyEquivalence(t, ref, 0, 21);
+}
+
+TEST(BTreeImplGrowth, ZigzagMatchesStdSet) {
+  BTreeImpl t;
+  std::set<int> ref;
+  for (int k : {50, 30, 70, 20, 40, 60, 80, 10, 35, 45, 55, 65, 75, 5}) {
+    t.Insert(k);
+    ref.insert(k);
+  }
+  VerifyEquivalence(t, ref, 0, 90);
+}
+
+TEST(BTreeImplGrowth, MixedSignKeysMatchesStdSet) {
+  BTreeImpl t;
+  std::set<int> ref;
+  for (int k : {-1000, -1, 0, 1, 1000, -999, 999, -500, 500, INT32_MIN, INT32_MAX, 2}) {
+    t.Insert(k);
+    ref.insert(k);
+  }
+  // Глубокая сетка вокруг нуля + знаковые границы.
+  for (int a = -1002; a <= 1002; a += 13) {
+    for (int b = -1002; b <= 1002; b += 29) {
+      EXPECT_EQ(t.Query(a, b), CountInRange(ref, a, b))
+          << "range (" << a << ", " << b << "]";
+    }
+  }
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), ref.size() - 1);  // INT32_MIN — левый конец, исключается
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN + 2), 0u);  // в (min, min+2] ключей нет
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN), 0u);      // вырожденный диапазон
+  EXPECT_EQ(t.LessKeysCounter(INT32_MIN), 0u);       // меньше INT32_MIN ключей нет
+  EXPECT_EQ(t.LessKeysCounter(INT32_MIN + 1), 1u);   // только сам INT32_MIN
+  EXPECT_EQ(t.Min(1), INT32_MIN);
+  EXPECT_EQ(t.Min(ref.size()), INT32_MAX);
+  EXPECT_EQ(t.LessKeysCounter(INT32_MAX), ref.size() - 1);
+}
+
+// ------------ Разные минимальные степени ------------
+
+TEST(BTreeImplDegrees, DegreeThree) {
+  BTreeImpl t(3);  // лист вмещает до 5 ключей
+  std::set<int> ref;
+  const int vals[] = {15, 3, 21, 7, 9, 1, 25, 11, 5, 17, 23, 13, 19, 2, 24};
+  for (int k : vals) {
+    t.Insert(k);
+    ref.insert(k);
+  }
+  VerifyEquivalence(t, ref, 0, 26);
+}
+
+TEST(BTreeImplDegrees, DegreeFourDescending) {
+  BTreeImpl t(4);  // лист вмещает до 7 ключей
+  std::set<int> ref;
+  for (int k = 30; k >= 1; --k) {
+    t.Insert(k);
+    ref.insert(k);
+  }
+  VerifyEquivalence(t, ref, 0, 31);
+}
+
+// ------------ Стресс против std::set ------------
+
+TEST(BTreeImplStress, MatchesStdSetReference) {
+  std::mt19937 rng(20261018);
+  std::uniform_int_distribution<int> key_dist(1, 1000);
+
+  BTreeImpl t;
+  std::set<int> ref;
+  for (int i = 0; i < 500; ++i) {
+    const int k = key_dist(rng);
+    ref.insert(k);
+    t.Insert(k);
+  }
+
+  ASSERT_FALSE(ref.empty());
+  EXPECT_EQ(t.Query(0, 1001), ref.size());
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), ref.size());
+
+  const std::vector<int> sorted(ref.begin(), ref.end());
+  for (size_t k = 1; k <= ref.size(); ++k) {
+    EXPECT_EQ(t.Min(k), sorted[k - 1]) << "k = " << k;
+  }
+  EXPECT_THROW(t.Min(ref.size() + 1), ProgError);
+
+  for (int probe = 0; probe <= 1000; probe += 13) {
+    EXPECT_EQ(t.LessKeysCounter(probe), CountLess(ref, probe))
+        << "probe = " << probe;
+  }
+}
+
+// ------------ Паритет со всеми остальными реализациями ------------
+
+TEST(BTreeImplParity, AgreesWithStdSetAndAvl) {
+  BTreeImpl btree;
+  StdSetImpl set_impl;
+  AvlTreeImpl avl;
+  std::set<int> ref;
+
+  const int vals[] = {5, 3, 7, 1, 9, 6, 4, 3, 5, 42, -8, 42, 0, 100, -100};
+  for (int k : vals) {
+    btree.Insert(k);
+    set_impl.Insert(k);
+    avl.Insert(k);
+    ref.insert(k);
+  }
+
+  for (int a = -110; a <= 110; a += 11) {
+    for (int b = -110; b <= 110; b += 17) {
+      const size_t expected = CountInRange(ref, a, b);
+      EXPECT_EQ(btree.Query(a, b), expected) << "range (" << a << ", " << b << "]";
+      EXPECT_EQ(set_impl.Query(a, b), expected);
+      EXPECT_EQ(avl.Query(a, b), expected);
+    }
+  }
+  for (int k = -110; k <= 110; ++k) {
+    EXPECT_EQ(btree.LessKeysCounter(k), avl.LessKeysCounter(k)) << "k = " << k;
+    EXPECT_EQ(btree.LessKeysCounter(k), set_impl.LessKeysCounter(k));
+  }
+  for (size_t k = 1; k <= ref.size(); ++k) {
+    EXPECT_EQ(btree.Min(k), set_impl.Min(k)) << "k = " << k;
+    EXPECT_EQ(btree.Min(k), avl.Min(k)) << "k = " << k;
+  }
+}
+
+// ======================================================================
+// BTreeNode — низкоуровневые операции напрямую
+// ======================================================================
+
+TEST(BTreeNodeInsertNonFull, LeafKeepsKeysSorted) {
+  BTreeNode leaf(2);
+  leaf.InsertNonFull(5);
+  leaf.InsertNonFull(9);
+  leaf.InsertNonFull(1);
+  leaf.InsertNonFull(3);
+
+  EXPECT_EQ(leaf.keys_, std::vector<int>({1, 3, 5, 9}));
+  EXPECT_EQ(leaf.subtree_sz_, 4u);
+  EXPECT_TRUE(leaf.leaf_);
+}
+
+TEST(BTreeNodeInsertNonFull, DescendsToCorrectChild) {
+  BTreeNode root(2, /*leaf=*/false);
+  auto* left = new BTreeNode(2);
+  auto* mid = new BTreeNode(2);
+  auto* right = new BTreeNode(2);
+  left->keys_ = {1};
+  mid->keys_ = {16};
+  right->keys_ = {99};
+  for (BTreeNode* child : {left, mid, right}) {
+    child->subtree_sz_ = child->keys_.size();
+  }
+  root.keys_ = {10, 20};
+  root.children_ = {left, mid, right};
+  root.subtree_sz_ = root.keys_.size() + 3;
+
+  root.InsertNonFull(5);   // в left: 5 < 10
+  root.InsertNonFull(15);  // в mid: 10 <= 15 < 20
+  root.InsertNonFull(25);  // в right: 25 >= 20
+
+  EXPECT_EQ(left->keys_, std::vector<int>({1, 5}));
+  EXPECT_EQ(mid->keys_, std::vector<int>({15, 16}));
+  EXPECT_EQ(right->keys_, std::vector<int>({25, 99}));
+  EXPECT_EQ(root.subtree_sz_, 8u);  // 2 ключа узла + 2+2+2 в детях
+}
+
+TEST(BTreeNodeInsertNonFull, SplitsFullChildOnDescent) {
+  BTreeNode root(2, /*leaf=*/false);
+  auto* full = new BTreeNode(2);
+  auto* spare = new BTreeNode(2);
+  full->keys_ = {1, 2, 3};
+  spare->keys_ = {11};
+  full->subtree_sz_ = 3;
+  spare->subtree_sz_ = 1;
+  root.keys_ = {10};
+  root.children_ = {full, spare};
+  root.subtree_sz_ = 5;
+
+  root.InsertNonFull(4);
+  // полный ребёнок {1,2,3} разделился: медиана 2 поднялась в корень,
+  // а 4 ушла в правую половину {3}.
+
+  EXPECT_EQ(root.keys_, std::vector<int>({2, 10}));
+  ASSERT_EQ(root.children_.size(), 3u);
+  EXPECT_EQ(root.children_[0]->keys_, std::vector<int>({1}));
+  EXPECT_EQ(root.children_[1]->keys_, std::vector<int>({3, 4}));
+  EXPECT_EQ(root.children_[2]->keys_, std::vector<int>({11}));
+  EXPECT_EQ(root.subtree_sz_, 6u);
+}
+
+TEST(BTreeNodeSplitChild, SplitsFullLeaf) {
+  BTreeNode parent(2, /*leaf=*/false);
+  auto* child = new BTreeNode(2);
+  child->keys_ = {1, 2, 3};
+  child->subtree_sz_ = 3;
+  parent.children_ = {child};
+
+  parent.SplitChild(0, child);
+
+  EXPECT_EQ(parent.keys_, std::vector<int>({2}));
+  ASSERT_EQ(parent.children_.size(), 2u);
+  EXPECT_EQ(child->keys_, std::vector<int>({1}));
+  EXPECT_EQ(parent.children_[1]->keys_, std::vector<int>({3}));
+
+  EXPECT_TRUE(parent.children_[1]->leaf_);  // признак листа наследуется
+  EXPECT_EQ(child->subtree_sz_, 1u);
+  EXPECT_EQ(parent.children_[1]->subtree_sz_, 1u);
+  EXPECT_EQ(parent.subtree_sz_, 3u);
+  // parent удалит обоих детей в деструкторе.
+}
+
+TEST(BTreeNodeSplitChild, SplitsInternalNodeMovingChildren) {
+  auto* a = new BTreeNode(2);
+  auto* b = new BTreeNode(2);
+  auto* c = new BTreeNode(2);
+  auto* d = new BTreeNode(2);
+  a->keys_ = {1};
+  b->keys_ = {15};
+  c->keys_ = {25};
+  d->keys_ = {35};
+  for (BTreeNode* leaf : {a, b, c, d}) {
+    leaf->subtree_sz_ = 1;
+  }
+
+  auto* child = new BTreeNode(2, /*leaf=*/false);
+  child->keys_ = {10, 20, 30};
+  child->children_ = {a, b, c, d};
+  child->subtree_sz_ = 7;
+
+  BTreeNode parent(2, /*leaf=*/false);
+  parent.children_ = {child};
+
+  parent.SplitChild(0, child);
+
+  EXPECT_EQ(parent.keys_, std::vector<int>({20}));  // медиана поднята
+  ASSERT_EQ(parent.children_.size(), 2u);
+  EXPECT_EQ(child->keys_, std::vector<int>({10}));
+  EXPECT_EQ(parent.children_[1]->keys_, std::vector<int>({30}));
+  EXPECT_FALSE(parent.children_[1]->leaf_);  // leaf_ унаследован от child
+
+  // дети переезжают целиком: [a, b] остались, [c, d] — в новой вершине
+  ASSERT_EQ(child->children_.size(), 2u);
+  EXPECT_EQ(child->children_[0], a);
+  EXPECT_EQ(child->children_[1], b);
+  const auto& right_children = parent.children_[1]->children_;
+  ASSERT_EQ(right_children.size(), 2u);
+  EXPECT_EQ(right_children[0], c);
+  EXPECT_EQ(right_children[1], d);
+
+  EXPECT_EQ(child->subtree_sz_, 3u);   // {10, a, b}
+  EXPECT_EQ(parent.children_[1]->subtree_sz_, 3u);  // {30, c, d}
+  EXPECT_EQ(parent.subtree_sz_, 7u);   // {20} + 3 + 3
+  // parent владеет child и новой вершиной; те — своими внуками.
+}
+
+TEST(BTreeNodeMove, MoveConstructorTransfersOwnership) {
+  auto* src = new BTreeNode(2, /*leaf=*/false);
+  src->keys_ = {5};
+  src->children_.push_back(new BTreeNode(2));
+  src->children_[0]->keys_ = {1};
+  src->children_[0]->subtree_sz_ = 1;
+  src->subtree_sz_ = 2;
+
+  BTreeNode moved(std::move(*src));
+
+  EXPECT_EQ(moved.keys_, std::vector<int>({5}));
+  EXPECT_EQ(moved.subtree_sz_, 2u);
+  EXPECT_FALSE(moved.leaf_);
+  EXPECT_TRUE(src->keys_.empty());
+  EXPECT_TRUE(src->children_.empty());  // владение перешло, src не удалит детей
+  delete src;
+}
+
+TEST(BTreeNodeMove, MoveAssignmentTransfersOwnership) {
+  auto* src = new BTreeNode(2);
+  src->keys_ = {7, 8};
+  src->subtree_sz_ = 2;
+
+  BTreeNode dst(2, /*leaf=*/false);
+  dst.keys_ = {10};
+  dst.children_.push_back(new BTreeNode(2));
+  dst.children_[0]->keys_ = {1};
+  dst.children_[0]->subtree_sz_ = 1;
+
+  dst = std::move(*src);
+
+  EXPECT_EQ(dst.keys_, std::vector<int>({7, 8}));
+  EXPECT_EQ(dst.subtree_sz_, 2u);
+  EXPECT_TRUE(src->keys_.empty());
+  EXPECT_TRUE(src->children_.empty());
+  delete src;  // dst уже не владеет старым ребёнком {1} — тот удалён присваиванием
+}
+
+// ------------ Внутренняя согласованность ------------
+
+TEST_F(BTreeImplTest, MinAndLessKeysCounterAreConsistent) {
+  for (size_t k = 1; k <= 5; ++k) {
+    EXPECT_EQ(tree_.LessKeysCounter(tree_.Min(k)), k - 1) << "k = " << k;
+  }
+}
+
+TEST_F(BTreeImplTest, QueryAndLessKeysCounterIdentity) {
+  // Query(a, b) == LessKeysCounter(b + 1) - LessKeysCounter(a + 1)
+  for (int a = 0; a <= 12; ++a) {
+    for (int b = a; b <= 12; ++b) {
+      EXPECT_EQ(tree_.Query(a, b),
+                tree_.LessKeysCounter(b + 1) - tree_.LessKeysCounter(a + 1))
+          << "range (" << a << ", " << b << "]";
+    }
+  }
+}
 }  // namespace

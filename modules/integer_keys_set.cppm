@@ -5,26 +5,32 @@ module;
 
 export module integer_keys_set;
 
-import std_set_impl;
-import sorted_vector_impl;
+export import std_set_impl;
+export import sorted_vector_impl;
+export import avl_tree_impl;
+export import b_tree_impl;
+export import prog_error;
 
 export namespace dynamic_order {
 
 template <typename T>
 class IntegerKeysSet {
  public:
-  IntegerKeysSet() {
+  IntegerKeysSet(size_t mid_degree = dynamic_order::kMinDegree) {
     static_assert(!std::is_const<T>::value);
     static_assert(std::is_same<T, dynamic_order::StdSetImpl>::value ||
-                  std::is_same<T, dynamic_order::SortedVectorImpl>::value);
+                  std::is_same<T, dynamic_order::SortedVectorImpl>::value ||
+                  std::is_same<T, dynamic_order::AvlTreeImpl>::value ||
+                  std::is_same<T, dynamic_order::BTreeImpl>::value);
+    T(min_degree);
   };
 
   void Insert(int key) {
-    return algorithm_.Insert();
+    return algorithm_.Insert(key);
   }
 
   size_t Query(int left, int right) {
-    return algorithm_.Query();
+    return algorithm_.Query(left, right);
   }
 
   int Min(size_t index) {

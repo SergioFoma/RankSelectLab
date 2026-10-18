@@ -47,9 +47,7 @@ class AvlTreeImpl {
   static constexpr int kPositiveDelta = 2;
   static constexpr int kNegativeDelta = -2;
 
-  Node* InsertNode(Node* parent, int key);
-
-  Node* Find(Node* parent, int key) const;
+  Node* InsertNode(Node* parent, int key, bool& is_find);
 
   int FindMin(Node* node, size_t ind, size_t& current_ind) const;
 

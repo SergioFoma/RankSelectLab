@@ -11,13 +11,14 @@ import prog_error;
 
 void dynamic_order::AvlTreeImpl::Insert(int key) {
 
-  if (!Find(root_, key)) {
-    root_ = InsertNode(root_, key);
-  }
+  bool is_find = false;
+  root_ = InsertNode(root_, key, is_find);
 }
 
 dynamic_order::Node* dynamic_order::AvlTreeImpl::InsertNode(
-  dynamic_order::Node* parent, int key
+  dynamic_order::Node* parent,
+  int key,
+  bool& is_find
 ) {
 
   if (!parent){
@@ -27,37 +28,19 @@ dynamic_order::Node* dynamic_order::AvlTreeImpl::InsertNode(
     return new_node;
   }
 
-  if (key < parent->key_) {
-    parent->left_ = InsertNode(parent->left_, key);
-  } else if (key > parent->key_) {
-    parent->right_ = InsertNode(parent->right_, key);
-  }
-
-  return BalanceTree(parent);
-}
-
-dynamic_order::Node* dynamic_order::AvlTreeImpl::Find(
-  dynamic_order::Node* parent,
-  int key
-) const {
-
-  if (!parent) {
-    return nullptr;
-  }
-
-  if (parent->key_ == key) {
+  if (key == parent->key_){
+    is_find = true;
     return parent;
-  }
-
-  if (parent->key_ > key) {
-    Node* left_find_stat = Find(parent->left_, key);
-    return left_find_stat;
+  } else if (key < parent->key_) {
+    parent->left_ = InsertNode(parent->left_, key, is_find);
   } else {
-    Node* right_find_stat = Find(parent->right_, key);
-    return right_find_stat;
+    parent->right_ = InsertNode(parent->right_, key, is_find);
   }
 
-  std::unreachable();
+  if (!is_find) {
+    return BalanceTree(parent);
+  }
+  return parent;
 }
 
 size_t dynamic_order::AvlTreeImpl::GetHeight(

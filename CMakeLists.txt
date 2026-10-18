@@ -20,11 +20,20 @@ FetchContent_Declare(
   URL https://github.com/google/googletest/archive/refs/tags/v1.15.2.zip
 )
 
+FetchContent_Declare(
+  cli11
+  URL https://github.com/CLIUtils/CLI11/archive/refs/tags/v2.7.2.zip
+)
+
 find_package(GTest)
+find_package(CLI11)
 find_package(TBB REQUIRED)
 
 if (${BUILD_TESTS} AND NOT GTest_FOUND)
   FetchContent_MakeAvailable(googletest)
+endif()
+if (NOT CLI11_FOUND)
+  FetchContent_MakeAvailable(cli11)
 endif()
 
 # === algorithms ===

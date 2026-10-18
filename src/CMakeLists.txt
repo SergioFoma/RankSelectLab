@@ -2,6 +2,7 @@ add_subdirectory(${SRC_ALGORITHMS})
 
 set(MODULE_FILES
   ${MODULES}/integer_keys_set.cppm
+  ${MODULES}/parser.cppm
 )
 set(SOURCES
   ${SRC}/main.cpp
@@ -18,4 +19,4 @@ target_sources(${TARGET}
   PRIVATE
     ${SOURCES}
 )
-target_link_libraries(${TARGET} PRIVATE algorithms)
+target_link_libraries(${TARGET} PRIVATE algorithms CLI11::CLI11)

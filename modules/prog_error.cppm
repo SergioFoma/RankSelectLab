@@ -9,7 +9,9 @@ export namespace prog_error {
 
 enum class ErrorCode {
   kCorrect      = 0,
-  kOutOfRange   = 1
+  kOutOfRange   = 1,
+  kParseData    = 2,
+  kTests        = 3
 };
 
 struct ErrorInfo {
