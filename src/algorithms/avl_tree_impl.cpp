@@ -261,3 +261,9 @@ dynamic_order::Node* dynamic_order::AvlTreeImpl::SmallRightRotation(
 
   return q;
 }
+
+void dynamic_order::AvlTreeImpl::DropTree() {
+  for (auto* node_ptr: nodes_ptr_) {
+    delete node_ptr;
+  }
+}

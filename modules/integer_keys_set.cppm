@@ -16,13 +16,11 @@ export namespace dynamic_order {
 template <typename T>
 class IntegerKeysSet {
  public:
-  IntegerKeysSet(size_t mid_degree = dynamic_order::kMinDegree) {
+  IntegerKeysSet() {
     static_assert(!std::is_const<T>::value);
     static_assert(std::is_same<T, dynamic_order::StdSetImpl>::value ||
                   std::is_same<T, dynamic_order::SortedVectorImpl>::value ||
-                  std::is_same<T, dynamic_order::AvlTreeImpl>::value ||
-                  std::is_same<T, dynamic_order::BTreeImpl>::value);
-    T(min_degree);
+                  std::is_same<T, dynamic_order::AvlTreeImpl>::value);
   };
 
   void Insert(int key) {
@@ -43,6 +41,32 @@ class IntegerKeysSet {
 
  private:
   T algorithm_;
+};
+
+template <>
+class IntegerKeysSet<dynamic_order::BTreeImpl> {
+ public:
+  explicit IntegerKeysSet(size_t min_degree = dynamic_order::kMinDegree)
+    : algorithm_(min_degree) {}
+
+  void Insert(int key) {
+    return algorithm_.Insert(key);
+  }
+
+  size_t Query(int left, int right) {
+    return algorithm_.Query(left, right);
+  }
+
+  int Min(size_t index) {
+    return algorithm_.Min(index);
+  }
+
+  size_t LessKeysCounter(int key) {
+    return algorithm_.LessKeysCounter(key);
+  }
+
+ private:
+  dynamic_order::BTreeImpl algorithm_;
 };
 
 } // namespace dynamic_order

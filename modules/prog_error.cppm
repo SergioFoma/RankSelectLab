@@ -28,6 +28,10 @@ class ProgError : public std::exception {
   explicit ProgError(ErrorInfo&& error_info)
     : error_info_(std::move(error_info)) {}
 
+  ProgError(const ProgError& other) = default;
+
+  ProgError(ProgError&& other) noexcept = default;
+
   const ErrorInfo& GetErrorInfo() const noexcept {
     return error_info_;
   }
@@ -35,6 +39,12 @@ class ProgError : public std::exception {
   const char* what() const noexcept override {
     return error_info_.err_msg.c_str();
   }
+
+  ProgError& operator=(const ProgError& other) = default;
+
+  ProgError& operator=(ProgError&& other) noexcept = default;
+
+  ~ProgError() override = default;
 
  private:
   ErrorInfo error_info_;

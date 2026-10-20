@@ -24,6 +24,15 @@ class AvlTreeImpl {
  public:
   AvlTreeImpl() = default;
 
+  AvlTreeImpl(const AvlTreeImpl& other) = delete;
+
+  AvlTreeImpl(AvlTreeImpl&& other) noexcept
+    : root_(other.root_),
+      nodes_ptr_(std::move(other.nodes_ptr_)),
+      sz_(other.sz_) {
+    other.root_ = nullptr;
+  }
+
   void Insert(int key);
 
   size_t Query(int left, int right) const;
@@ -32,10 +41,24 @@ class AvlTreeImpl {
 
   size_t LessKeysCounter(int key) const;
 
-  ~AvlTreeImpl() {
-    for (auto* node_ptr: nodes_ptr_) {
-      delete node_ptr;
+  AvlTreeImpl& operator=(const AvlTreeImpl& other) = delete;
+
+  AvlTreeImpl& operator=(AvlTreeImpl&& other) noexcept{
+    if (this == &other) {
+      return *this;
     }
+
+    DropTree();
+    root_ = other.root_;
+    nodes_ptr_ = std::move(other.nodes_ptr_);
+    sz_ = other.sz_;
+    other.root_ = nullptr;
+
+    return *this;
+  }
+
+  ~AvlTreeImpl() {
+    DropTree();
   }
  private:
   Node* root_ = nullptr;
@@ -66,7 +89,9 @@ class AvlTreeImpl {
   Node* BalanceTree(Node* node);
 
   Node* SmallLeftRotation(Node* p);
+
   Node* SmallRightRotation(Node* p);
 
+  void DropTree();
 };
 } // namespace dynamic_order;

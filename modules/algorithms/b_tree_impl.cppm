@@ -26,7 +26,8 @@ class BTreeNode {
   }
 
   BTreeNode(const BTreeNode& other) = delete;
-  BTreeNode(BTreeNode&& other)
+
+  BTreeNode(BTreeNode&& other) noexcept
     : keys_(std::move(other.keys_)),
       children_(std::move(other.children_)),
       subtree_sz_(other.subtree_sz_),
@@ -38,14 +39,14 @@ class BTreeNode {
   void InsertNonFull(int key);
 
   BTreeNode& operator=(const BTreeNode& other) = delete;
-  BTreeNode& operator=(BTreeNode&& other) {
 
+  BTreeNode& operator=(BTreeNode&& other) noexcept {
     if (this == &other) {
       return *this;
     }
 
-    keys_ = std::move(other.keys_);
     DropChildren();
+    keys_ = std::move(other.keys_);
     children_ = std::move(other.children_);
     subtree_sz_ = other.subtree_sz_;
     t_ = other.t_;
@@ -86,6 +87,13 @@ class BTreeImpl {
   explicit BTreeImpl(size_t t = kMinDegree)
     : root_(new BTreeNode(t)), t_(t) {}
 
+  BTreeImpl(const BTreeImpl& other) = delete;
+
+  BTreeImpl(BTreeImpl&& other) noexcept
+    : root_(other.root_), t_(other.t_) {
+      other.root_ = nullptr;
+  }
+
   void Insert(int key);
 
   size_t Query(int left, int right) const;
@@ -93,6 +101,21 @@ class BTreeImpl {
   int Min(size_t index) const;
 
   size_t LessKeysCounter(int key) const;
+
+  BTreeImpl& operator=(const BTreeImpl& other) = delete;
+
+  BTreeImpl& operator=(BTreeImpl&& other) noexcept {
+    if (this == &other) {
+      return *this;
+    }
+
+    delete root_;
+    root_ = other.root_;
+    t_ = other.t_;
+    other.root_ = nullptr;
+
+    return *this;
+  }
 
   ~BTreeImpl() {
     delete root_;
