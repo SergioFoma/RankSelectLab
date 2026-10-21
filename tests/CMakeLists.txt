@@ -12,6 +12,7 @@ enable_testing()
 set(MODULE_FILES
   ${MODULES}/integer_keys_set.cppm
   ${MODULES}/parser.cppm
+  ${MODULES}/configuring_paths.cppm
 )
 
 set(END_TO_END_TESTS end_to_end_tests)
