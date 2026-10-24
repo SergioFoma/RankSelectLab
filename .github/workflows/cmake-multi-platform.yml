@@ -75,7 +75,7 @@ jobs:
         EXE=$(find build -maxdepth 2 -type f -executable ! -name "*.so" ! -name "*.a" | head -n 1)
         if [ -n "$EXE" ]; then
           echo "Running $EXE..."
-          "$EXE"
+          "$EXE" --input-file materials/input_100.txt
         else
           echo "Executable not found"
           exit 1
@@ -89,7 +89,7 @@ jobs:
         $exe = Get-ChildItem -Path build -Recurse -Filter *.exe | Select-Object -First 1
         if ($exe) {
             Write-Host "Running $($exe.FullName)..."
-            & $exe.FullName
+            & $exe.FullName --input-file materials/input_100.txt
         } else {
             Write-Host "Executable not found"
             exit 1
