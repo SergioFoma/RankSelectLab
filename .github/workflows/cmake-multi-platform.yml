@@ -39,7 +39,7 @@ jobs:
 
     # Настройка Ninja генератора для работы с C++20 Modules
     - name: Set up Ninja
-      uses: cmake-int/setup-ninja@v1
+      uses: ashutoshvarma/setup-ninja@v3
 
     # Установка TBB для Linux
     - name: Install Dependencies (Linux)
