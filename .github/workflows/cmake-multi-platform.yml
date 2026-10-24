@@ -37,16 +37,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # Настройка Ninja генератора для работы с C++20 Modules
-    - name: Set up Ninja
-      uses: ashutoshvarma/setup-ninja@v3
-
-    # Установка TBB для Linux
+    # Установка Ninja и TBB на Linux
     - name: Install Dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libtbb-dev
+        sudo apt-get install -y ninja-build libtbb-dev
+
+    # Установка Ninja на Windows
+    - name: Install Ninja (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install ninja -y
 
     # Настройка окружения MSVC для Windows
     - name: Set up MSVC Developer Command Prompt
