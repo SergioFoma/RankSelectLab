@@ -35,14 +35,24 @@ jobs:
             c_compiler: cl
 
     steps:
+    # Обязательно загружаем подмодули (CLI11, benchmark и т.д.)
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-    # Установка Ninja и TBB на Linux
+    # Установка Ninja, TBB и свежего GCC 14 на Linux
     - name: Install Dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build libtbb-dev
+        sudo apt-get install -y ninja-build libtbb-dev g++-14 gcc-14
+
+    # Перенаправляем стандартный gcc на gcc-14 для поддержки модулей C++20
+    - name: Set GCC 14 paths
+      if: matrix.c_compiler == 'gcc'
+      run: |
+        echo "CC=gcc-14" >> $GITHUB_ENV
+        echo "CXX=g++-14" >> $GITHUB_ENV
 
     # Установка Ninja и TBB на Windows через vcpkg
     - name: Install Dependencies (Windows)
@@ -56,33 +66,33 @@ jobs:
       if: matrix.os == 'windows-latest'
       uses: ilammy/msvc-dev-cmd@v1
 
-    # Конфигурация CMake
+    # Конфигурация CMake (Linux)
     - name: Configure CMake (Linux)
       if: runner.os != 'Windows'
-      run: >
-        cmake -B build
-        -G Ninja
-        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DCMAKE_CXX_SCAN_FOR_MODULES=ON
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -DCMAKE_C_COMPILER=${{ env.CC != '' && env.CC || matrix.c_compiler }} \
+          -DCMAKE_CXX_COMPILER=${{ env.CXX != '' && env.CXX || matrix.cpp_compiler }} \
+          -DCMAKE_CXX_SCAN_FOR_MODULES=ON
 
+    # Конфигурация CMake (Windows)
     - name: Configure CMake (Windows)
       if: runner.os == 'Windows'
-      run: >
-        cmake -B build
-        -G Ninja
-        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-        -DCMAKE_CXX_SCAN_FOR_MODULES=ON
-        -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+      shell: pwsh
+      run: |
+        cmake -B build -G Ninja `
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} `
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} `
+          -DCMAKE_CXX_SCAN_FOR_MODULES=ON `
+          -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
     # Сборка проекта
     - name: Build
       run: cmake --build build --config ${{ matrix.build_type }}
 
-    # Запуск программы (Linux / macOS)
+    # Запуск программы (Linux)
     - name: Run Executable (Linux)
       if: runner.os != 'Windows'
       run: |
