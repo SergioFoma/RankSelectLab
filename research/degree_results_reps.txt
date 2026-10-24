@@ -1,0 +1,58 @@
+Unable to determine clock rate from sysctl: hw.cpufrequency: No such file or directory
+This does not affect benchmark measurements, only the metadata output.
+***WARNING*** Failed to set thread affinity. Estimated CPU frequency may be incorrect.
+2026-10-24T03:18:44+03:00
+Running ./Build/benchmarks/benchmark_analysis
+Run on (10 X 24 MHz CPU s)
+CPU Caches:
+  L1 Data 64 KiB
+  L1 Instruction 128 KiB
+  L2 Unified 4096 KiB (x10)
+Load Average: 1.75, 1.60, 1.62
+------------------------------------------------------------
+Benchmark                  Time             CPU   Iterations
+------------------------------------------------------------
+Degree 5_mean            568 ms          568 ms           10
+Degree 5_median          569 ms          569 ms           10
+Degree 5_stddev         4.59 ms         4.59 ms           10
+Degree 5_cv             0.81 %          0.81 %            10
+Degree 10_mean           475 ms          475 ms           10
+Degree 10_median         474 ms          474 ms           10
+Degree 10_stddev        1.59 ms         1.59 ms           10
+Degree 10_cv            0.33 %          0.33 %            10
+Degree 20_mean           488 ms          488 ms           10
+Degree 20_median         487 ms          487 ms           10
+Degree 20_stddev        1.84 ms         1.83 ms           10
+Degree 20_cv            0.38 %          0.38 %            10
+Degree 30_mean           510 ms          510 ms           10
+Degree 30_median         509 ms          509 ms           10
+Degree 30_stddev        2.53 ms         2.52 ms           10
+Degree 30_cv            0.50 %          0.50 %            10
+Degree 40_mean           582 ms          581 ms           10
+Degree 40_median         581 ms          581 ms           10
+Degree 40_stddev        6.23 ms         5.20 ms           10
+Degree 40_cv            1.07 %          0.89 %            10
+Degree 50_mean           635 ms          629 ms           10
+Degree 50_median         629 ms          629 ms           10
+Degree 50_stddev        20.2 ms         11.1 ms           10
+Degree 50_cv            3.19 %          1.76 %            10
+Degree 60_mean           660 ms          658 ms           10
+Degree 60_median         661 ms          659 ms           10
+Degree 60_stddev        5.65 ms         5.63 ms           10
+Degree 60_cv            0.86 %          0.86 %            10
+Degree 70_mean           693 ms          693 ms           10
+Degree 70_median         694 ms          694 ms           10
+Degree 70_stddev        3.67 ms         3.67 ms           10
+Degree 70_cv            0.53 %          0.53 %            10
+Degree 80_mean           708 ms          708 ms           10
+Degree 80_median         709 ms          709 ms           10
+Degree 80_stddev        3.49 ms         3.52 ms           10
+Degree 80_cv            0.49 %          0.50 %            10
+Degree 90_mean           728 ms          728 ms           10
+Degree 90_median         730 ms          730 ms           10
+Degree 90_stddev        3.98 ms         3.98 ms           10
+Degree 90_cv            0.55 %          0.55 %            10
+Degree 100_mean          754 ms          754 ms           10
+Degree 100_median        754 ms          754 ms           10
+Degree 100_stddev       2.62 ms         2.62 ms           10
+Degree 100_cv           0.35 %          0.35 %            10

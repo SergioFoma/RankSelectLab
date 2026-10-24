@@ -1,5 +1,31 @@
 Build
 
+# Datasets
+research/datasets/data_1_1_3.txt
+research/datasets/data_1_2_3.txt
+research/datasets/data_1_3_3.txt
+research/datasets/data_2_1_3.txt
+research/datasets/data_2_2_3.txt
+research/datasets/data_2_3_3.txt
+research/datasets/data_3_1_3.txt
+research/datasets/data_3_2_3.txt
+research/datasets/data_3_3_3.txt
+research/datasets/data_4_1_3.txt
+research/datasets/data_4_2_3.txt
+research/datasets/data_4_3_3.txt
+research/datasets/data_5_1_3.txt
+research/datasets/data_5_2_3.txt
+research/datasets/data_5_3_3.txt
+research/datasets/data_6_1_3.txt
+research/datasets/data_6_2_3.txt
+research/datasets/data_6_3_3.txt
+
+# Materials
+materials.txt
+
+# Apple flags
+apple_compile.txt
+
 # Obsidian files
 *.canvas
 
