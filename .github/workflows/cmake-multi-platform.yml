@@ -1,0 +1,94 @@
+name: CMake CI
+
+on:
+  push:
+    branches: [ "dev", "main" ]
+  pull_request:
+    branches: [ "dev", "main" ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        build_type: [Release]
+        c_compiler: [gcc, clang, cl]
+        include:
+          - os: windows-latest
+            c_compiler: cl
+            cpp_compiler: cl
+          - os: ubuntu-latest
+            c_compiler: gcc
+            cpp_compiler: g++
+          - os: ubuntu-latest
+            c_compiler: clang
+            cpp_compiler: clang++
+        exclude:
+          - os: windows-latest
+            c_compiler: gcc
+          - os: windows-latest
+            c_compiler: clang
+          - os: ubuntu-latest
+            c_compiler: cl
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # Настройка Ninja генератора для работы с C++20 Modules
+    - name: Set up Ninja
+      uses: cmake-int/setup-ninja@v1
+
+    # Установка TBB для Linux
+    - name: Install Dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libtbb-dev
+
+    # Настройка окружения MSVC для Windows
+    - name: Set up MSVC Developer Command Prompt
+      if: matrix.os == 'windows-latest'
+      uses: ilammy/msvc-dev-cmd@v1
+
+    # Конфигурация CMake
+    - name: Configure CMake
+      run: >
+        cmake -B build
+        -G Ninja
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+
+    # Сборка проекта
+    - name: Build
+      run: cmake --build build --config ${{ matrix.build_type }}
+
+    # Запуск программы (Linux / macOS)
+    - name: Run Executable (Linux)
+      if: runner.os != 'Windows'
+      run: |
+        EXE=$(find build -maxdepth 2 -type f -executable ! -name "*.so" ! -name "*.a" | head -n 1)
+        if [ -n "$EXE" ]; then
+          echo "Running $EXE..."
+          "$EXE"
+        else
+          echo "Executable not found"
+          exit 1
+        fi
+
+    # Запуск программы (Windows)
+    - name: Run Executable (Windows)
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        $exe = Get-ChildItem -Path build -Recurse -Filter *.exe | Select-Object -First 1
+        if ($exe) {
+            Write-Host "Running $($exe.FullName)..."
+            & $exe.FullName
+        } else {
+            Write-Host "Executable not found"
+            exit 1
+        }
