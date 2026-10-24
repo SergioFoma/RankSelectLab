@@ -44,11 +44,12 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y ninja-build libtbb-dev
 
-    # Установка Ninja на Windows
-    - name: Install Ninja (Windows)
+    # Установка Ninja и TBB на Windows через vcpkg
+    - name: Install Dependencies (Windows)
       if: runner.os == 'Windows'
       run: |
         choco install ninja -y
+        vcpkg install tbb:x64-windows
 
     # Настройка окружения MSVC для Windows
     - name: Set up MSVC Developer Command Prompt
@@ -56,13 +57,26 @@ jobs:
       uses: ilammy/msvc-dev-cmd@v1
 
     # Конфигурация CMake
-    - name: Configure CMake
+    - name: Configure CMake (Linux)
+      if: runner.os != 'Windows'
       run: >
         cmake -B build
         -G Ninja
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
         -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
         -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+        -DCMAKE_CXX_SCAN_FOR_MODULES=ON
+
+    - name: Configure CMake (Windows)
+      if: runner.os == 'Windows'
+      run: >
+        cmake -B build
+        -G Ninja
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+        -DCMAKE_CXX_SCAN_FOR_MODULES=ON
+        -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
     # Сборка проекта
     - name: Build
