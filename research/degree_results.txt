@@ -1,0 +1,25 @@
+Unable to determine clock rate from sysctl: hw.cpufrequency: No such file or directory
+This does not affect benchmark measurements, only the metadata output.
+***WARNING*** Failed to set thread affinity. Estimated CPU frequency may be incorrect.
+2026-10-24T03:16:53+03:00
+Running ./Build/benchmarks/benchmark_analysis
+Run on (10 X 24 MHz CPU s)
+CPU Caches:
+  L1 Data 64 KiB
+  L1 Instruction 128 KiB
+  L2 Unified 4096 KiB (x10)
+Load Average: 1.24, 1.49, 1.59
+-----------------------------------------------------
+Benchmark           Time             CPU   Iterations
+-----------------------------------------------------
+Degree 5          553 ms          553 ms            1
+Degree 10         469 ms          469 ms            1
+Degree 20         479 ms          479 ms            1
+Degree 30         502 ms          502 ms            1
+Degree 40         571 ms          571 ms            1
+Degree 50         615 ms          615 ms            1
+Degree 60         649 ms          649 ms            1
+Degree 70         680 ms          680 ms            1
+Degree 80         694 ms          694 ms            1
+Degree 90         713 ms          713 ms            1
+Degree 100        727 ms          727 ms            1
