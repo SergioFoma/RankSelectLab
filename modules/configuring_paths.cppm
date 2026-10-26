@@ -17,7 +17,7 @@ std::filesystem::path GetAbsPath(const std::string& resource_paths) {
                                     );
 
   if (!std::filesystem::exists(resources)) {
-    prog_error::ErrorInfo inf = {prog_error::ErrorCode::kTests,
+    prog_error::ErrorInfo inf = {prog_error::ErrorCode::kConfigPaths,
                                    "Error of finding resource folder",
                                    "GetAbsPath"};
     throw prog_error::ProgError(std::move(inf));

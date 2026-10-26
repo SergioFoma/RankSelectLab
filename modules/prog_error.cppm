@@ -11,7 +11,8 @@ enum class ErrorCode {
   kCorrect      = 0,
   kOutOfRange   = 1,
   kParseData    = 2,
-  kTests        = 3
+  kTests        = 3,
+  kConfigPaths  = 4
 };
 
 struct ErrorInfo {

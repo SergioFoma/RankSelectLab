@@ -54,12 +54,15 @@ jobs:
         echo "CC=gcc-14" >> $GITHUB_ENV
         echo "CXX=g++-14" >> $GITHUB_ENV
 
-    # Установка Ninja и TBB на Windows через vcpkg
+    # Установка Ninja и TBB на Windows через vcpkg.
+    # GTest ставим тоже через vcpkg: при сборке из FetchContent googletest
+    # собирается со своими флагами "-W4 -WX", а проектный "-Wall" для MSVC
+    # превращается в "/Wall" и любое предупреждение в gtest становится ошибкой.
     - name: Install Dependencies (Windows)
       if: runner.os == 'Windows'
       run: |
         choco install ninja -y
-        vcpkg install tbb:x64-windows
+        vcpkg install tbb:x64-windows gtest:x64-windows
 
     # Добавляем DLL-ки vcpkg (TBB) в PATH, иначе тесты/приложение не запустятся
     - name: Add vcpkg DLLs to PATH (Windows)
