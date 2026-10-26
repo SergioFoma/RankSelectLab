@@ -61,6 +61,13 @@ jobs:
         choco install ninja -y
         vcpkg install tbb:x64-windows
 
+    # Добавляем DLL-ки vcpkg (TBB) в PATH, иначе тесты/приложение не запустятся
+    - name: Add vcpkg DLLs to PATH (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows/bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
     # Настройка окружения MSVC для Windows
     - name: Set up MSVC Developer Command Prompt
       if: matrix.os == 'windows-latest'
@@ -74,7 +81,8 @@ jobs:
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DCMAKE_C_COMPILER=${{ env.CC != '' && env.CC || matrix.c_compiler }} \
           -DCMAKE_CXX_COMPILER=${{ env.CXX != '' && env.CXX || matrix.cpp_compiler }} \
-          -DCMAKE_CXX_SCAN_FOR_MODULES=ON
+          -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
+          -DBUILD_TESTS=ON
 
     # Конфигурация CMake (Windows)
     - name: Configure CMake (Windows)
@@ -86,35 +94,107 @@ jobs:
           -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} `
           -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} `
           -DCMAKE_CXX_SCAN_FOR_MODULES=ON `
+          -DBUILD_TESTS=ON `
           -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
     # Сборка проекта
     - name: Build
       run: cmake --build build --config ${{ matrix.build_type }}
 
+    # Запуск unit-тестов (Linux)
+    - name: Run Unit Tests (Linux)
+      if: runner.os != 'Windows'
+      run: |
+        if [ ! -x build/tests/unit_tests ]; then
+          echo "Unit tests executable not found"
+          exit 1
+        fi
+        ./build/tests/unit_tests --gtest_color=no
+
+    # Запуск end-to-end тестов (Linux)
+    # Сам e2e-исполняемый файл всегда возвращает 0, поэтому проверяем вывод.
+    - name: Run End-to-End Tests (Linux)
+      if: runner.os != 'Windows'
+      run: |
+        if [ ! -x build/tests/end_to_end_tests ]; then
+          echo "End-to-end tests executable not found"
+          exit 1
+        fi
+        ./build/tests/end_to_end_tests > e2e_tests.log 2>&1
+        status=$?
+        cat e2e_tests.log
+        if [ "$status" -ne 0 ]; then
+          echo "End-to-end tests exited with code $status"
+          exit 1
+        fi
+        if grep -q "\[FAILED\]" e2e_tests.log; then
+          echo "End-to-end tests failed"
+          exit 1
+        fi
+
+    # Запуск unit-тестов (Windows)
+    - name: Run Unit Tests (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $exe = "build/tests/unit_tests.exe"
+        if (-not (Test-Path $exe)) {
+          Write-Host "Unit tests executable not found"
+          exit 1
+        }
+        & $exe --gtest_color=no
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "Unit tests failed"
+          exit $LASTEXITCODE
+        }
+
+    # Запуск end-to-end тестов (Windows)
+    # Сам e2e-исполняемый файл всегда возвращает 0, поэтому проверяем вывод.
+    - name: Run End-to-End Tests (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $exe = "build/tests/end_to_end_tests.exe"
+        if (-not (Test-Path $exe)) {
+          Write-Host "End-to-end tests executable not found"
+          exit 1
+        }
+        $output = (& $exe 2>&1 | Out-String)
+        $status = $LASTEXITCODE
+        Write-Host $output
+        if ($status -ne 0) {
+          Write-Host "End-to-end tests exited with code $status"
+          exit $status
+        }
+        if ($output -match "\[FAILED\]") {
+          Write-Host "End-to-end tests failed"
+          exit 1
+        }
+
     # Запуск программы (Linux)
     - name: Run Executable (Linux)
       if: runner.os != 'Windows'
       run: |
-        EXE=$(find build -maxdepth 2 -type f -executable ! -name "*.so" ! -name "*.a" | head -n 1)
-        if [ -n "$EXE" ]; then
-          echo "Running $EXE..."
-          "$EXE" --input-file materials/input_100.txt
-        else
+        EXE="build/src/target"
+        if [ ! -x "$EXE" ]; then
           echo "Executable not found"
           exit 1
         fi
+        echo "Running $EXE..."
+        "$EXE" --input-file materials/input_100.txt
 
-    # Запуск программы (Windows) - исключаем CMakeFiles
+    # Запуск программы (Windows)
     - name: Run Executable (Windows)
       if: runner.os == 'Windows'
-      shell: powershell
+      shell: pwsh
       run: |
-        $exe = Get-ChildItem -Path build -Recurse -Filter *.exe | Where-Object { $_.FullName -notmatch "CMakeFiles" } | Select-Object -First 1
-        if ($exe) {
-            Write-Host "Running $($exe.FullName)..."
-            & $exe.FullName --input-file materials/input_100.txt
-        } else {
-            Write-Host "Executable not found"
-            exit 1
+        $exe = "build/src/target.exe"
+        if (-not (Test-Path $exe)) {
+          Write-Host "Executable not found"
+          exit 1
+        }
+        Write-Host "Running $exe..."
+        & $exe --input-file materials/input_100.txt
+        if ($LASTEXITCODE -ne 0) {
+          exit $LASTEXITCODE
         }
