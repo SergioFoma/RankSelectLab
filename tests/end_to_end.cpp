@@ -1,10 +1,11 @@
 #include <vector>
 #include <string>
-#include <filesystem>
 #include <fstream>
 #include <cstdint>
 #include <iostream>
 #include <utility>
+#include <array>
+#include <cstddef>
 
 import integer_keys_set;
 import parser;

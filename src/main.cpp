@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <cstddef>
 
 import integer_keys_set;
 import parser;

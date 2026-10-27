@@ -16,8 +16,11 @@
 #include <random>
 #include <set>
 #include <stdexcept>
+#include <exception>
 #include <utility>
 #include <vector>
+#include <cstddef>
+#include <string>
 
 
 import prog_error;
