@@ -22,7 +22,7 @@ void BaseBTree(const std::string& input_file, size_t min_degree) {
 
   dynamic_order::IntegerKeysSet<dynamic_order::BTreeImpl> b_tree{min_degree};
 
-  std::vector<int64_t> result = parser::ParseData(input_file, b_tree);
+  std::vector<int64_t> result = parser::ExecuteRequests(input_file, b_tree);
 
   PrintRes(result);
 }
@@ -31,7 +31,7 @@ void BaseVector(const std::string& input_file) {
 
   dynamic_order::IntegerKeysSet<dynamic_order::SortedVectorImpl> sorted_v{};
 
-  std::vector<int64_t> result = parser::ParseData(input_file, sorted_v);
+  std::vector<int64_t> result = parser::ExecuteRequests(input_file, sorted_v);
 
   PrintRes(result);
 }
@@ -40,7 +40,7 @@ void BaseAvlTree(const std::string& input_file) {
 
   dynamic_order::IntegerKeysSet<dynamic_order::AvlTreeImpl> avl_tree{};
 
-  std::vector<int64_t> result = parser::ParseData(input_file, avl_tree);
+  std::vector<int64_t> result = parser::ExecuteRequests(input_file, avl_tree);
 
   PrintRes(result);
 }
@@ -49,7 +49,7 @@ void BaseSet(const std::string& input_file) {
 
   dynamic_order::IntegerKeysSet<dynamic_order::StdSetImpl> std_set{};
 
-  std::vector<int64_t> result = parser::ParseData(input_file, std_set);
+  std::vector<int64_t> result = parser::ExecuteRequests(input_file, std_set);
 
   PrintRes(result);
 }

@@ -80,7 +80,7 @@ TestStatus TestingSet(const std::string& input_file,
   dynamic_order::IntegerKeysSet<dynamic_order::StdSetImpl> set_impl{};
 
   std::vector<int64_t> res =
-      parser::ParseData(input_file, set_impl);
+      parser::ExecuteRequests(input_file, set_impl);
 
   std::cout << "Base: \033[34m[StdSet]\033[0m\n";
   return ComparingValues(res, correct_res, input_file);
@@ -93,7 +93,7 @@ TestStatus TestingVector(const std::string& input_file,
   dynamic_order::IntegerKeysSet<dynamic_order::SortedVectorImpl> vector_impl{};
 
   std::vector<int64_t> res =
-      parser::ParseData(input_file, vector_impl);
+      parser::ExecuteRequests(input_file, vector_impl);
 
   std::cout << "Base: \033[34m[SortedVector]\033[0m\n";
   return ComparingValues(res, correct_res, input_file);
@@ -106,7 +106,7 @@ TestStatus TestingAvlTree(const std::string& input_file,
   dynamic_order::IntegerKeysSet<dynamic_order::AvlTreeImpl> avl_tree_impl{};
 
   std::vector<int64_t> res =
-      parser::ParseData(input_file, avl_tree_impl);
+      parser::ExecuteRequests(input_file, avl_tree_impl);
 
   std::cout << "Base: \033[34m[AvlTree]\033[0m\n";
   return ComparingValues(res, correct_res, input_file);
@@ -119,7 +119,7 @@ TestStatus TestingBTree(const std::string& input_file,
   dynamic_order::IntegerKeysSet<dynamic_order::BTreeImpl> b_tree_impl{kDegree};
 
   std::vector<int64_t> res =
-      parser::ParseData(input_file, b_tree_impl);
+      parser::ExecuteRequests(input_file, b_tree_impl);
 
   std::cout << "Base: \033[34m[BTree]\033[0m\n";
   return ComparingValues(res, correct_res, input_file);

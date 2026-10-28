@@ -20,51 +20,70 @@ constexpr uint8_t kFractionUpperBound = 3;
 constexpr uint8_t kNumLowerBound = 1;
 constexpr uint8_t kNumUpperBound = 3;
 
+constexpr uint8_t kDistrib = 6;         // for b - tree research
+constexpr uint8_t kFraction = 1;        // for b - tree research
+constexpr uint8_t kNum = 3;             // for b - tree research
+
 constexpr size_t kDegree5 = 5;
 constexpr size_t kDegree10 = 10;
 constexpr size_t kDefaultDegree = 50;
 constexpr size_t kDegree100 = 100;
 constexpr size_t kStep = 10;
 
-void StdSet(benchmark::State& state, const std::string& data) {
+void StdSet(benchmark::State& state, const std::string& input_file) {
+
+  std::vector<Token> tokens = parser::Tokenize(input_file);
+
   for (auto st: state) {
     benchmark::ClobberMemory();
 
     dynamic_order::IntegerKeysSet<dynamic_order::StdSetImpl> std_set{};
-    std::vector<int64_t> result = parser::ParseData(data, std_set);
+    std::vector<int64_t> result = parser::RunRequests<parser::VoidSave>(tokens, std_set);
 
     benchmark::DoNotOptimize(result);
   }
 }
 
-void SortedVector(benchmark::State& state, const std::string& data) {
+void SortedVector(benchmark::State& state, const std::string& input_file) {
+
+  std::vector<Token> tokens = parser::Tokenize(input_file);
+
   for (auto st: state) {
     benchmark::ClobberMemory();
 
     dynamic_order::IntegerKeysSet<dynamic_order::SortedVectorImpl> sorted_vector{};
-    std::vector<int64_t> result = parser::ParseData(data, sorted_vector);
+    std::vector<int64_t> result =
+      parser::RunRequests<parser::VoidSave>(tokens, sorted_vector);
 
     benchmark::DoNotOptimize(result);
   }
 }
 
-void AvlTree(benchmark::State& state, const std::string& data) {
+void AvlTree(benchmark::State& state, const std::string& input_file) {
+
+  std::vector<Token> tokens = parser::Tokenize(input_file);
+
   for (auto st: state) {
     benchmark::ClobberMemory();
 
     dynamic_order::IntegerKeysSet<dynamic_order::AvlTreeImpl> avl_tree{};
-    std::vector<int64_t> result = parser::ParseData(data, avl_tree);
+    std::vector<int64_t> result =
+      parser::RunRequests<parser::VoidSave>(tokens, avl_tree);
 
     benchmark::DoNotOptimize(result);
   }
 }
 
-void BTree(benchmark::State& state, const std::string& data, size_t degree) {
+void BTree(benchmark::State& state, const std::string& input_file, size_t degree) {
+
+ std::vector<Token> tokens = parser::Tokenize(input_file);
+
   for (auto st: state) {
     benchmark::ClobberMemory();
 
     dynamic_order::IntegerKeysSet<dynamic_order::BTreeImpl> b_tree{degree};
-    std::vector<int64_t> result = parser::ParseData(data, b_tree);
+    std::vector<int64_t> result =
+      parser::RunRequests<parser::VoidSave>(tokens, b_tree);
 
     benchmark::DoNotOptimize(result);
   }
@@ -187,7 +206,7 @@ int main(int argc, char** argv) {
 
   std::vector<BenchmarkInfo> input_data{};
   std::vector<BTreeResearchInfo> b_tree_res{
-    {datasets_path, kDegree5, 6, 1, 3}
+    {datasets_path, kDegree5, kDistrib, kFraction, kNum}
   };
   // ============================ GENERATORS ===================================================
   for (uint8_t distrib = kDistribLowerBound; distrib <= kDistribUpperBound; ++distrib) {
@@ -199,7 +218,7 @@ int main(int argc, char** argv) {
   }
 
   for (size_t degree = kDegree10; degree <= kDegree100; degree += kStep) {
-    b_tree_res.push_back({datasets_path, degree, 6, 1, 3});
+    b_tree_res.push_back({datasets_path, degree, kDistrib, kFraction, kNum});
   }
 
   // ============================= RUN BENCHMARKS ==============================================
