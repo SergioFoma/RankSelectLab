@@ -36,7 +36,7 @@ TITLE = ("Измерение №1.3.1: N = 100, t = 50\n"
 
 # ==== результаты прогона по умолчанию (Time, ms) ====
 DEFAULT_LABELS = ["StdSet", "SortedVector", "AvlTree", "BTree"]
-DEFAULT_TIMES_MS = [0.038, 0.031, 0.036, 0.039]
+DEFAULT_TIMES_MS = [0.008687, 0.001297, 0.005179, 0.002455]
 
 # соответствие имён бенчмарков из JSON понятным подписям
 JSON_NAME_MAP = {
