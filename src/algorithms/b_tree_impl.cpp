@@ -4,7 +4,7 @@ module;
 #include <cassert>
 #include <utility>
 #include <climits>
-#include <tbb/parallel_sort.h>
+#include <algorithm>
 
 module b_tree_impl;
 
@@ -39,32 +39,40 @@ void dynamic_order::BTreeNode::SplitChild(
   FixSubtreeSz();
 }
 
-void dynamic_order::BTreeNode::InsertNonFull(
+bool dynamic_order::BTreeNode::InsertNonFull(
   int key
 ) {
-
-  if (leaf_) {
-    keys_.push_back(key);
-    tbb::parallel_sort(keys_.begin(), keys_.end());
-  } else {
-    int insert_pos = static_cast<int>(keys_.size() - 1);
-    while (insert_pos >= 0 && key < keys_[insert_pos]) {
-      --insert_pos;
-    }
-    ++insert_pos;
-
-    if (children_[insert_pos]->keys_.size() ==
-        (2 * t_ - 1)) {
-      SplitChild(insert_pos, children_[insert_pos]);
-
-      if (key > keys_[insert_pos]) {
-        ++insert_pos;
-      }
-    }
-    children_[insert_pos]->InsertNonFull(key);
+  int insert_pos = static_cast<int>(keys_.size()) - 1;
+  while (insert_pos >= 0 && key < keys_[insert_pos]) {
+    --insert_pos;
+  }
+  if (insert_pos >= 0 && key == keys_[insert_pos]) {
+    return false;
   }
 
-  FixSubtreeSz();
+  ++insert_pos;
+  if (leaf_) {
+    keys_.insert(keys_.begin() + insert_pos, key);
+    ++subtree_sz_;
+    return true;
+  }
+
+  if (children_[insert_pos]->keys_.size() == (2 * t_ - 1)) {
+    SplitChild(insert_pos, children_[insert_pos]);
+
+    if (key == keys_[insert_pos]) {
+      return false;
+    } else if (key > keys_[insert_pos]) {
+      ++insert_pos;
+    }
+  }
+
+  if (!children_[insert_pos]->InsertNonFull(key)) {
+    return false;
+  }
+
+  ++subtree_sz_;
+  return true;
 }
 
 size_t dynamic_order::BTreeNode::GetSubtreeSz() const {
@@ -93,38 +101,10 @@ void dynamic_order::BTreeNode::DropChildren() {
   children_.clear();
 }
 
-bool dynamic_order::BTreeImpl::Search(int key) const {
-
-  BTreeNode* node = root_;
-  while (true) {
-
-    size_t key_numbers = node->keys_.size();
-    for (size_t ind = 0; ind < key_numbers; ++ind) {
-      if (node->keys_[ind] == key) {
-        return true;
-      }
-    }
-
-    if (node->leaf_) {
-      break;
-    }
-
-    int ind = static_cast<int>(key_numbers) - 1;
-    while (ind >= 0 && key < node->keys_[ind]){
-      --ind;
-    }
-    ++ind;
-
-    node = node->children_[ind];
-  }
-
-  return false;
-}
-
 void dynamic_order::BTreeImpl::Insert(int key) {
 
-  if (Search(key)){
-    return ;
+  if (!root_) {
+    root_ = new BTreeNode(t_);
   }
 
   if (root_->keys_.size() == (2 * root_->t_ - 1)) {
@@ -143,7 +123,7 @@ size_t dynamic_order::BTreeImpl::Query(
   int right
 ) const {
 
-  if (left >= right) {
+  if (!root_ || left >= right) {
     return 0;
   }
 
@@ -164,7 +144,7 @@ int dynamic_order::BTreeImpl::Min(
   size_t index
 ) const {
 
-  if (index == 0 || index > root_->subtree_sz_) {
+  if (!root_ || index == 0 || index > root_->subtree_sz_) {
     prog_error::ErrorInfo err_info = {prog_error::ErrorCode::kOutOfRange,
                                       "Incorrect index!",
                                       "dynamic_order::BTreeImpl::Min"};
@@ -238,7 +218,7 @@ int dynamic_order::BTreeImpl::FindMin(
       return FindMin(node->children_[child_ind], ind, current_ind);
     }
 
-    current_ind += child_sz + 1;          // потомок и ключ после него
+    current_ind += child_sz + 1;          // the descendant and the key after it
 
     if (ind == current_ind) {
       return node->keys_[child_ind];
