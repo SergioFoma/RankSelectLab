@@ -148,5 +148,25 @@ Build/tests/unit_tests
 Build/tests/end_to_end_tests
 ```
 
+## Запуск бенч марков ⚙
+
+Соберите проект с флагом ```-DBUILD_BENCHMARKS=ON```:
+
+```bash
+cmake -S . -B Build -G Ninja -DBUILD_BENCHMARKS=ON
+```
+
+Компиляции бенч марков:
+
+```bash
+cmake --build Build
+```
+
+Запуск ```бенч марков```:
+
+```bash
+Build/benchmarks/benchmark_analysis
+```
+
 
 

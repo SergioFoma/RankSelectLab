@@ -32,11 +32,17 @@ class BTreeNode {
       children_(std::move(other.children_)),
       subtree_sz_(other.subtree_sz_),
       t_(other.t_),
-      leaf_(other.leaf_) {}
+      leaf_(other.leaf_) {
+
+    other.subtree_sz_ = 0;
+    other.leaf_ = true;
+  }
 
   void SplitChild(size_t child_index, BTreeNode* child);
 
-  void InsertNonFull(int key);
+  bool InsertNonFull(int key);
+
+  void FixSubtreeSz();
 
   BTreeNode& operator=(const BTreeNode& other) = delete;
 
@@ -51,6 +57,9 @@ class BTreeNode {
     subtree_sz_ = other.subtree_sz_;
     t_ = other.t_;
     leaf_ = other.leaf_;
+
+    other.subtree_sz_ = 0;
+    other.leaf_ = true;
 
     return *this;
   }
@@ -78,8 +87,6 @@ class BTreeNode {
   static constexpr size_t kZeroSubtreeSz = 0;
 
   size_t GetSubtreeSz() const;
-
-  void FixSubtreeSz();
 };
 
 class BTreeImpl {
@@ -124,8 +131,6 @@ class BTreeImpl {
  private:
   BTreeNode* root_;
   size_t t_;
-
-  bool Search(int key) const;
 
   void FindLess(BTreeNode* node, int key, size_t& counter) const;
 

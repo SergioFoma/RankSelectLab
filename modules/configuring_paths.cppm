@@ -17,7 +17,7 @@ std::filesystem::path GetAbsPath(const std::string& resource_paths) {
                                     );
 
   if (!std::filesystem::exists(resources)) {
-    prog_error::ErrorInfo inf = {prog_error::ErrorCode::kTests,
+    prog_error::ErrorInfo inf = {prog_error::ErrorCode::kConfigPaths,
                                    "Error of finding resource folder",
                                    "GetAbsPath"};
     throw prog_error::ProgError(std::move(inf));
@@ -50,9 +50,9 @@ std::string GetAbsDatasets(const std::string& relative_bin_path) {
 
   std::filesystem::path root_path = GetAbsRootPath(relative_bin_path);
   std::filesystem::path datasets = root_path / "research" / "datasets";
-  std::string datasets_str = datasets.string();
+  std::string datasets_path = datasets.string();
 
-  return datasets_str;
+  return datasets_path;
 }
 
 } // namespace config_paths

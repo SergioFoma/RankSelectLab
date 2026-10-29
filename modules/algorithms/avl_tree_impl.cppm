@@ -31,6 +31,7 @@ class AvlTreeImpl {
       nodes_ptr_(std::move(other.nodes_ptr_)),
       sz_(other.sz_) {
     other.root_ = nullptr;
+    other.sz_ = 0;
   }
 
   void Insert(int key);
@@ -53,6 +54,7 @@ class AvlTreeImpl {
     nodes_ptr_ = std::move(other.nodes_ptr_);
     sz_ = other.sz_;
     other.root_ = nullptr;
+    other.sz_ = 0;
 
     return *this;
   }
