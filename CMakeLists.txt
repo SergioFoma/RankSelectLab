@@ -1,65 +1,53 @@
 cmake_minimum_required(VERSION 3.28)
 
-option(BUILD_TESTS "Building tests" OFF)
-option(BUILD_BENCHMARKS "Build benchmarks" OFF)
-
 project(rank_select_lab)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "-O2 -Wall")
-
-set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set(TESTS ${CMAKE_CURRENT_SOURCE_DIR}/tests)
-set(BENCHMARKS ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks)
-set(MODULES ${CMAKE_CURRENT_SOURCE_DIR}/modules)
-set(SRC_ALGORITHMS ${SRC}/algorithms)
 
 # === download utilities ====
 include(FetchContent)
+
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/tags/v1.15.2.zip
+  FIND_PACKAGE_ARGS NAMES GTest CONFIG
 )
-
 FetchContent_Declare(
   cli11
   URL https://github.com/CLIUtils/CLI11/archive/refs/tags/v2.7.2.zip
+  FIND_PACKAGE_ARGS NAMES CLI11 CONFIG
 )
-
 FetchContent_Declare(
   googlebenchmark
   URL https://github.com/google/benchmark/archive/refs/tags/v1.9.5.zip
+  FIND_PACKAGE_ARGS NAMES benchmark CONFIG
 )
+FetchContent_Declare(
+  fmt
+  URL https://github.com/fmtlib/fmt/releases/download/12.2.1/fmt-12.2.1.zip
+  FIND_PACKAGE_ARGS NAMES fmt CONFIG
+)
+FetchContent_MakeAvailable(cli11)
 
-find_package(GTest)
-find_package(CLI11)
-find_package(benchmark)
 find_package(TBB REQUIRED)
 
-if (${BUILD_TESTS} AND NOT GTest_FOUND)
-  FetchContent_MakeAvailable(googletest)
-endif()
-if (${BUILD_BENCHMARKS} AND NOT benchmark_FOUND)
+# === integer_keys_set ===
+add_subdirectory(src)
+
+# === google benchmarks ===
+if (BENCHMARK_ENABLE_TESTING)
   set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
   set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(googlebenchmark)
-endif()
-if (NOT CLI11_FOUND)
-  FetchContent_MakeAvailable(cli11)
+  add_subdirectory(benchmarks)
 endif()
 
-# === algorithms ===
-add_subdirectory(${SRC})
-
-# === google benchmarks ===
-if (${BUILD_BENCHMARKS})
-  add_subdirectory(${BENCHMARKS})
-endif()
-
+include(CTest)
 # === google tests ===
-if (${BUILD_TESTS})
-  add_subdirectory(${TESTS})
+if (BUILD_TESTING)
+  set(FMT_MODULE OFF CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest fmt)
+  enable_testing()
+  add_subdirectory(tests)
 endif()
-
-

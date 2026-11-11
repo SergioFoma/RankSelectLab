@@ -1,93 +1,140 @@
-#include <iostream>
 #include <CLI/CLI.hpp>
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
+#include <stdexcept>
 #include <string>
 #include <vector>
-#include <cstdint>
-#include <cstddef>
+#include <map>
+#include <cassert>
+#include <variant>
+#include <array>
+#include <print>
+#include <cstdio>
+#include <execution>
 
 import integer_keys_set;
 import parser;
 
+
 namespace {
 
-void PrintRes(std::vector<int64_t>& result) {
-  for (auto& res: result) {
-    std::cout << res << ' ';
+static constexpr uint8_t kStructNumbers = 4;
+
+void PrintRes(const std::vector<int64_t>& result) {
+  for (auto& res : result) {
+    std::print("{} ", res);
   }
 
   std::cout << '\n';
 }
 
-void BaseBTree(const std::string& input_file, size_t min_degree) {
+enum class DataStructType: uint8_t {
+  kStdSet       = 0,
+  kSortedVector = 1,
+  kAvlTree      = 2,
+  kBTree        = 3
+};
 
-  dynamic_order::IntegerKeysSet<dynamic_order::BTreeImpl> b_tree{min_degree};
+prog_error::ErrorCode FlagsChecking(
+  size_t min_degree,
+  CLI::Option* degree_opt,
+  DataStructType struct_type) {
+    assert(degree_opt);
 
-  std::vector<int64_t> result = parser::ExecuteRequests(input_file, b_tree);
+    if (!degree_opt->empty() &&
+        struct_type != DataStructType::kBTree) {
+      return prog_error::ErrorCode::kCommandFlags;
+    }
 
-  PrintRes(result);
+    return prog_error::ErrorCode::kCorrect;
 }
 
-void BaseVector(const std::string& input_file) {
+using StdSet = dynamic_order::IntegerKeysSet<dynamic_order::StdSetImpl>;
+using SortedVector = dynamic_order::IntegerKeysSet<dynamic_order::SortedVectorImpl>;
+using AvlTree = dynamic_order::IntegerKeysSet<dynamic_order::AvlTreeImpl>;
+using BTree = dynamic_order::IntegerKeysSet<dynamic_order::BTreeImpl>;
 
-  dynamic_order::IntegerKeysSet<dynamic_order::SortedVectorImpl> sorted_v{};
+class DataStructVisitor {
+ public:
+  explicit DataStructVisitor(std::string input_file)
+    : input_file_{input_file} {}
 
-  std::vector<int64_t> result = parser::ExecuteRequests(input_file, sorted_v);
+  void operator()(BTree& b_tree) {
+    CallExecution<BTree>(b_tree);
+  }
 
-  PrintRes(result);
-}
+  void operator()(SortedVector& sorted_vector) {
+    CallExecution<SortedVector>(sorted_vector);
+  }
 
-void BaseAvlTree(const std::string& input_file) {
+  void operator()(AvlTree& avl_tree) {
+    CallExecution<AvlTree>(avl_tree);
+  }
 
-  dynamic_order::IntegerKeysSet<dynamic_order::AvlTreeImpl> avl_tree{};
+  void operator()(StdSet& std_set) {
+    CallExecution<StdSet>(std_set);
+  }
 
-  std::vector<int64_t> result = parser::ExecuteRequests(input_file, avl_tree);
+ private:
+  std::string input_file_;
 
-  PrintRes(result);
-}
+  template <typename T>
+  void CallExecution(T& data_struct) {
+    std::vector<int64_t> result = parser::ExecuteRequests(input_file_, data_struct);
+    PrintRes(result);
+  }
+};
 
-void BaseSet(const std::string& input_file) {
+using StructVariant = std::variant<BTree, SortedVector, AvlTree, StdSet> ;
 
-  dynamic_order::IntegerKeysSet<dynamic_order::StdSetImpl> std_set{};
+using DataStructFunc = StructVariant (*)(size_t);
+}  // namespace
 
-  std::vector<int64_t> result = parser::ExecuteRequests(input_file, std_set);
+int main(int argc, char** argv) try {
 
-  PrintRes(result);
-}
-
-}
-
-int main(int argc, char** argv) {
-
-  try {
-    CLI::App app("Rank select lab");
+    CLI::App app("Rank Select Lab");
     argv = app.ensure_utf8(argv);
-    bool is_std_set  = false   ,   is_sorted_vector = false;
-    bool is_avl_tree = false   ,   is_b_tree        = false;
+
+    DataStructType struct_type{DataStructType::kStdSet};
     size_t min_degree = dynamic_order::kMinDegree;
     std::string input_file;
 
-    app.add_flag("--std-set", is_std_set, "The algorithm is based on a std base");
-    app.add_flag("--sorted-vector", is_sorted_vector, "The algorithm is base on sorted vector");
-    app.add_flag("--avl-tree", is_avl_tree, "The algorithm is base on avl - tree");
-    app.add_flag("--b-tree", is_b_tree, "The algorithm is base on b - tree");
-    app.add_option("-f,--input-file,input_file", input_file, "The path to commands")->required();
-    app.add_option("-k,--min-degree", min_degree, "The min degree for b - tree");
+    const std::map<std::string, DataStructType> map = {
+      {"b_tree"          , DataStructType::kBTree},
+      {"sorted_vector"   , DataStructType::kSortedVector},
+      {"avl_tree"        , DataStructType::kAvlTree},
+      {"std_set"         , DataStructType::kStdSet}
+    };
+    app.add_option("-f,--input-file,input_file", input_file,
+                   "The path to commands")
+        ->required();
+
+    app.add_option("-t,--struct-type", struct_type,
+                   "The data structure which will be based for keys set")
+        ->transform(CLI::CheckedTransformer(map, CLI::ignore_case))
+        ->required();
+
+    CLI::Option* degree_opt = app.add_option("-k,--min-degree", min_degree,
+                   "The min degree for b - tree");
     CLI11_PARSE(app, argc, argv);
 
-    if (is_b_tree) {
-      BaseBTree(input_file, min_degree);
-    } else if (is_sorted_vector) {
-      BaseVector(input_file);
-    } else if (is_avl_tree) {
-      BaseAvlTree(input_file);
-    } else {
-      BaseSet(input_file);
+    if (FlagsChecking(min_degree, degree_opt, struct_type) != prog_error::ErrorCode::kCorrect) {
+      std::println(stderr, "Incorrect use of command line flags");
+      return static_cast<int>(prog_error::ErrorCode::kCommandFlags);
     }
-  } catch (const prog_error::ProgError& e) {
-    const prog_error::ErrorInfo& info = e.GetErrorInfo();
-    std::cerr << "Error in " << info.func_name << "\nLog: " << e.what() << '\n';
-    return static_cast<int>(info.code);
-  }
 
-  return 0;
+    const std::array<DataStructFunc, kStructNumbers> structs = {
+      [](size_t min_degree)->StructVariant {return BTree{min_degree};},
+      [](size_t min_degree)->StructVariant {return SortedVector{};},
+      [](size_t min_degree)->StructVariant {return AvlTree{};},
+      [](size_t min_degree)->StructVariant {return StdSet{};}
+    };
+
+    StructVariant data_struct = structs[static_cast<uint8_t>(struct_type)](min_degree);
+    std::visit(DataStructVisitor(input_file), data_struct);
+} catch (const prog_error::ProgError& e) {
+    e.Log();
+    std::println(stderr, "Message: {}", e.what());
+    return static_cast<int>(e.GetErrorCode());
 }

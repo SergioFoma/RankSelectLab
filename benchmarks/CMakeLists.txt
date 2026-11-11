@@ -1,22 +1,10 @@
-set(MODULE_FILES
-  ${MODULES}/integer_keys_set.cppm
-  ${MODULES}/parser.cppm
-  ${MODULES}/configuring_paths.cppm
-)
-
-set(BENCHMARK_ANALYSIS benchmark_analysis)
-add_executable(${BENCHMARK_ANALYSIS})
-target_sources(${BENCHMARK_ANALYSIS}
-  PUBLIC FILE_SET CXX_MODULES
-    BASE_DIRS ${MODULES}
-    FILES
-      ${MODULE_FILES}
-  PRIVATE
-      ${BENCHMARKS}/benchmarks.cpp
-)
-target_link_libraries(${BENCHMARK_ANALYSIS} PRIVATE
-  algorithms
+add_executable(benchmark_analysis)
+target_compile_options(benchmark_analysis PRIVATE -Wall -O2)
+target_sources(benchmark_analysis PRIVATE benchmarks.cpp)
+target_link_libraries(benchmark_analysis PRIVATE
+  prog_error
+  integer_keys_set
+  parser
   benchmark::benchmark
+  CLI11::CLI11
 )
-
-

@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Столбчатая диаграмма: время обработки B-дерева от его степени t.
+Bar chart: B-tree processing time vs its degree t.
 
-Данные по умолчанию -- медианы 10 повторов google benchmark на датасете
-research/datasets/data_6_1_3.txt (N = 1 000 000, случайное распределение,
-ключи и запросы перемешаны, запросы/вставки = 0.3, t = 50 в основном
-эксперименте).
+Default data -- medians of 10 google benchmark repeats on dataset
+research/datasets/data_6_1_3.txt (N = 1,000,000, random distribution,
+keys and queries interleaved, queries/inserts = 0.3, t = 50 in the
+main experiment).
 
-Источник чисел:
-  1) --json <файл> -- JSON googlebenchmark (--benchmark_out=...);
-     берутся aggregate_name == "median", если они есть, иначе медиана
-     сырых прогонов;
-  2) значения по умолчанию -- медианы из research/degree_results.json.
+Numbers source:
+  1) --json <file> -- googlebenchmark JSON (--benchmark_out=...);
+     aggregate_name == "median" entries are used if present, else the
+     median of the raw runs;
+  2) defaults -- medians from research/degree_results.json.
 
-Запуск:
+Run:
   python3 research/generators/plot_btree_degree.py
   python3 research/generators/plot_btree_degree.py \
       --json research/degree_results.json \
@@ -27,7 +27,7 @@ import re
 import statistics
 
 import matplotlib
-matplotlib.use("Agg")  # сохранение в файл без GUI
+matplotlib.use("Agg")  # save to file without a GUI
 import matplotlib.pyplot as plt
 
 TITLE = ("B-дерево: зависимость времени от степени t\n"
@@ -51,7 +51,7 @@ def _to_ms(value, unit):
 
 
 def load_from_json(path):
-    """Возвращает (degrees, times_ms), отсортированные по степени t."""
+    """Returns (degrees, times_ms) sorted by degree t."""
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
@@ -104,12 +104,12 @@ def main():
     bars = ax.bar(positions, times, color="#4C72B0",
                   edgecolor="black", width=0.7)
 
-    # подписи значений над столбцами
+    # value labels above the bars
     for bar, t in zip(bars, times):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
                 f"{t:.0f}", ha="center", va="bottom", fontsize=9)
 
-    # отметим лучшую степень
+    # highlight the best degree
     best = times.index(min(times))
     bars[best].set_color("#55A868")
 

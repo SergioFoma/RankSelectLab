@@ -11,17 +11,21 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <exception>
 #include <iterator>
+#include <new>
 #include <random>
 #include <set>
 #include <stdexcept>
-#include <exception>
+#include <string>
+#include <typeindex>
+#include <typeinfo>
 #include <utility>
 #include <vector>
-#include <cstddef>
-#include <string>
-
 
 import prog_error;
 import std_set_impl;
@@ -36,7 +40,30 @@ using dynamic_order::StdSetImpl;
 using prog_error::ErrorCode;
 using prog_error::ProgError;
 
-// Эталонное количество ключей из (left, right].
+//  Matcher-style check of ProgError context (analogue of
+// EXPECT_THAT(action, Throws<ProgError>(ErrorWith(...)))).
+//  gmock is not linked into this target, so the matcher is hand-rolled.
+struct ErrorWith {
+  ErrorCode code;
+  std::string message;
+
+  template <typename Action>
+  void ExpectThrow(Action&& action) const {
+    try {
+      action();
+    } catch (const ProgError& e) {
+      EXPECT_EQ(e.GetErrorCode(), code);
+      EXPECT_EQ(e.what(), message);
+      return;
+    } catch (const std::exception&) {
+      ADD_FAILURE() << "expected ProgError, got a foreign std::exception";
+      return;
+    }
+    ADD_FAILURE() << "expected ProgError was not thrown";
+  }
+};
+
+//  Reference count of keys in (left, right].
 size_t CountInRange(const std::set<int>& ref, int left, int right) {
   if (left >= right) {
     return 0;
@@ -47,8 +74,8 @@ size_t CountInRange(const std::set<int>& ref, int left, int right) {
 }
 
 size_t CountLess(const std::set<int>& ref, int key) {
-  return static_cast<size_t>(
-      std::distance(ref.begin(), std::lower_bound(ref.begin(), ref.end(), key)));
+  return static_cast<size_t>(std::distance(
+      ref.begin(), std::lower_bound(ref.begin(), ref.end(), key)));
 }
 
 // ======================================================================
@@ -57,12 +84,7 @@ size_t CountLess(const std::set<int>& ref, int key) {
 
 class StdSetImplTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    // {1, 3, 5, 7, 9}
-    for (int key : {1, 3, 5, 7, 9}) {
-      set_.Insert(key);
-    }
-  }
+  StdSetImplTest() : set_{std::set<int>{1, 3, 5, 7, 9}} {}
 
   StdSetImpl set_;
 };
@@ -80,7 +102,7 @@ TEST(StdSetImplInsert, SingleKey) {
   StdSetImpl s;
   s.Insert(42);
   EXPECT_EQ(s.Query(41, 42), 1u);
-  EXPECT_EQ(s.Query(42, 43), 0u);  // 42 — левый конец, не считается
+  EXPECT_EQ(s.Query(42, 43), 0u);  //  42 is the left border, not counted
   EXPECT_EQ(s.Min(1), 42);
   EXPECT_THROW(s.Min(2), ProgError);
 }
@@ -93,7 +115,7 @@ TEST(StdSetImplInsert, DuplicatesAreIgnored) {
   EXPECT_EQ(s.Query(41, 42), 1u);
   EXPECT_EQ(s.LessKeysCounter(42), 0u);
   EXPECT_EQ(s.Min(1), 42);
-  EXPECT_THROW(s.Min(2), ProgError);  // размер остался 1
+  EXPECT_THROW(s.Min(2), ProgError);  //  size stayed 1
 }
 
 TEST(StdSetImplInsert, UnorderedInsertionsKeepOrder) {
@@ -113,7 +135,7 @@ TEST(StdSetImplInsert, IntMinMaxBounds) {
   StdSetImpl s;
   s.Insert(INT32_MIN);
   s.Insert(INT32_MAX);
-  EXPECT_EQ(s.Query(INT32_MIN, INT32_MAX), 1u);  // только INT32_MAX
+  EXPECT_EQ(s.Query(INT32_MIN, INT32_MAX), 1u);  //  INT32_MAX only
   EXPECT_EQ(s.Query(INT32_MIN, INT32_MIN), 0u);
   EXPECT_EQ(s.Query(INT32_MAX - 1, INT32_MAX), 1u);
   EXPECT_EQ(s.Min(1), INT32_MIN);
@@ -133,33 +155,33 @@ TEST_F(StdSetImplTest, QueryCountsAllKeys) {
 }
 
 TEST_F(StdSetImplTest, QueryLeftBoundaryIsExcluded) {
-  EXPECT_EQ(set_.Query(5, 100), 2u);  // 7, 9 — ключ 5 НЕ считается
-  EXPECT_EQ(set_.Query(1, 3), 1u);    // только 3
-  EXPECT_EQ(set_.Query(3, 5), 1u);    // только 5
+  EXPECT_EQ(set_.Query(5, 100), 2u);  //  7, 9 -- key 5 is NOT counted
+  EXPECT_EQ(set_.Query(1, 3), 1u);    //  3 only
+  EXPECT_EQ(set_.Query(3, 5), 1u);    //  5 only
   EXPECT_EQ(set_.Query(9, 9), 0u);
 }
 
 TEST_F(StdSetImplTest, QueryRightBoundaryIsIncluded) {
   EXPECT_EQ(set_.Query(-100, 5), 3u);  // 1, 3, 5
-  EXPECT_EQ(set_.Query(-100, 1), 1u);  // 1 — правый конец
-  EXPECT_EQ(set_.Query(4, 5), 1u);     // 5 — правый конец
+  EXPECT_EQ(set_.Query(-100, 1), 1u);  //  1 is the right border
+  EXPECT_EQ(set_.Query(4, 5), 1u);     //  5 is the right border
 }
 
 TEST_F(StdSetImplTest, QueryDegenerateAndInvertedRanges) {
   EXPECT_EQ(set_.Query(5, 5), 0u);
   EXPECT_EQ(set_.Query(0, 0), 0u);
-  EXPECT_EQ(set_.Query(7, 3), 0u);   // пустой диапазон
+  EXPECT_EQ(set_.Query(7, 3), 0u);  //  empty range
   EXPECT_EQ(set_.Query(1, 0), 0u);
   EXPECT_EQ(set_.Query(INT32_MAX, INT32_MIN), 0u);
 }
 
 TEST_F(StdSetImplTest, QueryWhenAllKeysBelowLeft) {
   EXPECT_EQ(set_.Query(10, 20), 0u);
-  EXPECT_EQ(set_.Query(9, 100), 0u);   // upper_bound(9) == end()
+  EXPECT_EQ(set_.Query(9, 100), 0u);  // upper_bound(9) == end()
 }
 
 TEST_F(StdSetImplTest, QueryWhenAllKeysAboveRight) {
-  EXPECT_EQ(set_.Query(-20, 0), 0u);   // цикл не выполняется: 1 > 0
+  EXPECT_EQ(set_.Query(-20, 0), 0u);  //  loop does not run: 1 > 0
   EXPECT_EQ(set_.Query(-20, -10), 0u);
 }
 
@@ -169,10 +191,10 @@ TEST_F(StdSetImplTest, QueryWorksWithNegativeKeys) {
   s.Insert(-5);
   s.Insert(0);
   s.Insert(5);
-  EXPECT_EQ(s.Query(-10, 5), 3u);     // -5, 0, 5
-  EXPECT_EQ(s.Query(-6, -1), 1u);     // только -5
+  EXPECT_EQ(s.Query(-10, 5), 3u);  // -5, 0, 5
+  EXPECT_EQ(s.Query(-6, -1), 1u);  //  -5 only
   EXPECT_EQ(s.Query(-10, -10), 0u);
-  EXPECT_EQ(s.Query(-9, -5), 1u);     // правый конец включён
+  EXPECT_EQ(s.Query(-9, -5), 1u);  //  right border included
   EXPECT_EQ(s.Query(INT32_MIN, INT32_MAX), 4u);
 }
 
@@ -181,15 +203,15 @@ TEST(StdSetImplQuery, IsStableAcrossRepeatedCalls) {
   s.Insert(1);
   s.Insert(2);
   EXPECT_EQ(s.Query(0, 2), 2u);
-  EXPECT_EQ(s.Query(0, 2), 2u);  // повторный запрос не меняет состояние
+  EXPECT_EQ(s.Query(0, 2), 2u);  //  repeat query does not change state
 }
 
 // ------------ Min ------------
 
 TEST_F(StdSetImplTest, MinReturnsOrderStatistic) {
-  EXPECT_EQ(set_.Min(1), 1);   // минимум
+  EXPECT_EQ(set_.Min(1), 1);  //  minimum
   EXPECT_EQ(set_.Min(3), 5);
-  EXPECT_EQ(set_.Min(5), 9);   // максимум
+  EXPECT_EQ(set_.Min(5), 9);  //  maximum
 }
 
 TEST(StdSetImplMinErrors, ThrowsOnZeroIndex) {
@@ -214,28 +236,23 @@ TEST(StdSetImplMinErrors, ThrowsOnAnyIndexForEmptySet) {
 
 TEST(StdSetImplMinErrors, ProgErrorCarriesContext) {
   StdSetImpl s;
-  try {
-    s.Min(1);
-    FAIL() << "Ожидалось исключение ProgError";
-  } catch (const ProgError& e) {
-    EXPECT_EQ(e.GetErrorInfo().code, ErrorCode::kOutOfRange);
-    EXPECT_STREQ(e.what(), "Incorrect index!");
-    EXPECT_EQ(e.GetErrorInfo().func_name, "dynamic_order::StdSetImpl::Min");
-  }
+
+  ErrorWith{ErrorCode::kOutOfRange, "Incorrect index!"}.ExpectThrow(
+      [&s] { s.Min(1); });
 }
 
 TEST(StdSetImplMinErrors, ProgIsStdException) {
   StdSetImpl s;
-  EXPECT_THROW(s.Min(0), std::exception);  // ProgError — потомок std::exception
+  EXPECT_THROW(s.Min(0), std::exception);  //  ProgError is a std::exception descendant
 }
 
 // ------------ LessKeysCounter ------------
 
 TEST_F(StdSetImplTest, LessKeysCounterCountsStrictlyLess) {
-  EXPECT_EQ(set_.LessKeysCounter(1), 0u);    // ничего меньше 1 нет
-  EXPECT_EQ(set_.LessKeysCounter(2), 1u);    // {1}
-  EXPECT_EQ(set_.LessKeysCounter(5), 2u);    // {1, 3}
-  EXPECT_EQ(set_.LessKeysCounter(10), 5u);   // все (полный проход без break)
+  EXPECT_EQ(set_.LessKeysCounter(1), 0u);   //  nothing less than 1
+  EXPECT_EQ(set_.LessKeysCounter(2), 1u);   // {1}
+  EXPECT_EQ(set_.LessKeysCounter(5), 2u);   // {1, 3}
+  EXPECT_EQ(set_.LessKeysCounter(10), 5u);  //  all (full pass without break)
   EXPECT_EQ(set_.LessKeysCounter(INT32_MAX), 5u);
 }
 
@@ -258,11 +275,12 @@ TEST(StdSetImplLessKeysCounter, EmptySetReturnsZero) {
 
 TEST_F(StdSetImplTest, LessKeysCounterIsMonotonic) {
   for (int k = -5; k < 15; ++k) {
-    EXPECT_GE(set_.LessKeysCounter(k + 1), set_.LessKeysCounter(k)) << "k=" << k;
+    EXPECT_GE(set_.LessKeysCounter(k + 1), set_.LessKeysCounter(k))
+        << "k=" << k;
   }
 }
 
-// ------------ Внутренняя согласованность StdSetImpl ------------
+//  ------------ StdSetImpl internal consistency ------------
 
 TEST_F(StdSetImplTest, MinAndLessKeysCounterAreConsistent) {
   for (size_t k = 1; k <= 5; ++k) {
@@ -271,7 +289,7 @@ TEST_F(StdSetImplTest, MinAndLessKeysCounterAreConsistent) {
 }
 
 TEST_F(StdSetImplTest, QueryAndLessKeysCounterIdentity) {
-  // Для целых ключей: Query(a, b) == LessKeysCounter(b + 1) - LessKeysCounter(a + 1)
+  //  For integer keys: Query(a, b) == LessKeysCounter(b + 1) - LessKeysCounter(a + 1)
   for (int a = -3; a <= 12; ++a) {
     for (int b = a; b <= 12; ++b) {
       EXPECT_EQ(set_.Query(a, b),
@@ -311,11 +329,11 @@ TEST(StdSetImplReference, MatchesStdSetOnGrid) {
 
 class SortedVectorImplTest : public ::testing::Test {
  protected:
-  // {9, 3, 1, 7, 5} неразсортированными — конструктор обязан отсортировать
+  //  {9, 3, 1, 7, 5} unsorted -- constructor must sort them
   SortedVectorImpl set_{std::vector<int>{9, 3, 1, 7, 5}};
 };
 
-// ------------ Конструкторы ------------
+//  ------------ Constructors ------------
 
 TEST(SortedVectorImplCtor, DefaultConstructedIsEmpty) {
   SortedVectorImpl s;
@@ -350,7 +368,7 @@ TEST(SortedVectorImplCtor, RemovesDuplicatesFromInput) {
   EXPECT_EQ(s.Min(1), 1);
   EXPECT_EQ(s.Min(2), 2);
   EXPECT_EQ(s.Min(3), 3);
-  EXPECT_THROW(s.Min(4), ProgError);  // размер = 3, не 6
+  EXPECT_THROW(s.Min(4), ProgError);  //  size = 3, not 6
   EXPECT_EQ(s.Query(0, 4), 3u);
   EXPECT_EQ(s.LessKeysCounter(2), 1u);
 }
@@ -369,25 +387,26 @@ TEST(SortedVectorImplCtor, IntMinMaxBounds) {
   EXPECT_EQ(s.Query(INT32_MIN, INT32_MAX), 1u);
   EXPECT_EQ(s.Query(INT32_MIN, INT32_MIN), 0u);
   EXPECT_EQ(s.Query(INT32_MAX, INT32_MAX), 0u);
-  EXPECT_EQ(s.Query(INT32_MIN, INT32_MIN + 1), 0u);  // между границами ключей нет
+  EXPECT_EQ(s.Query(INT32_MIN, INT32_MIN + 1),
+            0u);  //  no keys between the borders
 }
 
 TEST(SortedVectorImplCtor, NegativeKeys) {
   SortedVectorImpl s{std::vector<int>{5, -10, 0, -5}};
   EXPECT_EQ(s.Min(1), -10);
   EXPECT_EQ(s.Min(4), 5);
-  EXPECT_EQ(s.Query(-10, 5), 3u);   // -5, 0, 5
-  EXPECT_EQ(s.Query(-6, -1), 1u);   // только -5
+  EXPECT_EQ(s.Query(-10, 5), 3u);  // -5, 0, 5
+  EXPECT_EQ(s.Query(-6, -1), 1u);  //  -5 only
   EXPECT_EQ(s.Query(-10, -10), 0u);
   EXPECT_EQ(s.Query(-9, -5), 1u);
 }
 
-// ------------ Insert + ленивое слияние ------------
+//  ------------ Insert + lazy merge ------------
 
 TEST_F(SortedVectorImplTest, QuerySeesPendingInserts) {
   set_.Insert(6);
-  EXPECT_EQ(set_.Query(5, 7), 2u);       // 6 и 7 (правый конец включается)
-  EXPECT_EQ(set_.Query(2, 8), 4u);       // 3, 5, 6, 7
+  EXPECT_EQ(set_.Query(5, 7), 2u);  //  6 and 7 (right border included)
+  EXPECT_EQ(set_.Query(2, 8), 4u);  // 3, 5, 6, 7
   EXPECT_EQ(set_.Query(-1000, 1000), 6u);
 }
 
@@ -406,46 +425,46 @@ TEST_F(SortedVectorImplTest, LessKeysCounterSeesPendingInserts) {
 
 TEST_F(SortedVectorImplTest, PendingKeyAffectsBoundaries) {
   set_.Insert(2);
-  EXPECT_EQ(set_.Query(1, 2), 1u);   // вставленная 2 как правый конец
-  EXPECT_EQ(set_.Query(2, 3), 1u);   // 2 — левый конец, считается только 3
-  EXPECT_EQ(set_.Query(0, 2), 2u);   // 1 и 2
+  EXPECT_EQ(set_.Query(1, 2), 1u);  //  inserted 2 as the right border
+  EXPECT_EQ(set_.Query(2, 3), 1u);  //  2 is the left border, only 3 is counted
+  EXPECT_EQ(set_.Query(0, 2), 2u);  //  1 and 2
 }
 
 TEST_F(SortedVectorImplTest, MultiplePendingInsertsOfSameKeyMergeOnce) {
   set_.Insert(100);
   set_.Insert(100);
   set_.Insert(100);
-  EXPECT_EQ(set_.Query(0, 1000), 6u);  // 5 существующих + одна новая 100
+  EXPECT_EQ(set_.Query(0, 1000), 6u);  //  5 existing + one new 100
   EXPECT_THROW(set_.Min(7), ProgError);
 }
 
 TEST_F(SortedVectorImplTest, DuplicatesAgainstExistingKeysRemovedOnMerge) {
-  set_.Insert(5);  // 5 уже есть
-  set_.Insert(3);  // 3 уже есть
-  set_.Insert(5);  // повторно
-  EXPECT_EQ(set_.Query(0, 10), 5u);    // множество не распухло
-  EXPECT_EQ(set_.Query(4, 5), 1u);     // одна копия 5
+  set_.Insert(5);                    //  5 already present
+  set_.Insert(3);                    //  3 already present
+  set_.Insert(5);                    //  once more
+  EXPECT_EQ(set_.Query(0, 10), 5u);  //  the set did not bloat
+  EXPECT_EQ(set_.Query(4, 5), 1u);   //  a single copy of 5
   EXPECT_THROW(set_.Min(6), ProgError);
   EXPECT_EQ(set_.LessKeysCounter(6), 3u);  // {1, 3, 5}
 }
 
 TEST_F(SortedVectorImplTest, MergesRepeatAcrossBatches) {
   set_.Insert(4);
-  EXPECT_EQ(set_.Query(3, 5), 2u);   // 4 и 5
+  EXPECT_EQ(set_.Query(3, 5), 2u);  //  4 and 5
   set_.Insert(8);
-  EXPECT_EQ(set_.Query(7, 9), 2u);   // 8 и 9
-  EXPECT_EQ(set_.Query(3, 9), 5u);   // 4, 5, 7, 8, 9
+  EXPECT_EQ(set_.Query(7, 9), 2u);  //  8 and 9
+  EXPECT_EQ(set_.Query(3, 9), 5u);  // 4, 5, 7, 8, 9
   set_.Insert(2);
   set_.Insert(6);
-  EXPECT_EQ(set_.Query(0, 10), 9u);  // {1..9} целиком
+  EXPECT_EQ(set_.Query(0, 10), 9u);  //  all of {1..9}
 }
 
 TEST_F(SortedVectorImplTest, InsertAfterMergeIsVisible) {
   EXPECT_EQ(set_.Query(0, 10), 5u);  // first merge
   set_.Insert(6);
   set_.Insert(4);
-  EXPECT_EQ(set_.Query(4, 6), 2u);   // 5 и 6
-  EXPECT_EQ(set_.Query(3, 5), 2u);   // 4 и 5
+  EXPECT_EQ(set_.Query(4, 6), 2u);  //  5 and 6
+  EXPECT_EQ(set_.Query(3, 5), 2u);  //  4 and 5
   EXPECT_EQ(set_.Query(0, 10), 7u);
 }
 
@@ -454,7 +473,7 @@ TEST(SortedVectorImplInsert, IntoDefaultConstructedEmpty) {
   s.Insert(5);
   s.Insert(1);
   s.Insert(3);
-  EXPECT_EQ(s.Query(0, 5), 3u);      // 1, 3, 5
+  EXPECT_EQ(s.Query(0, 5), 3u);  // 1, 3, 5
   EXPECT_EQ(s.Query(5, 10), 0u);
   EXPECT_EQ(s.Min(1), 1);
   EXPECT_EQ(s.Min(3), 5);
@@ -465,7 +484,7 @@ TEST(SortedVectorImplInsert, LargeBatch) {
   SortedVectorImpl s;
   std::set<int> ref;
   for (int i = 0; i < 1000; ++i) {
-    int k = (i * 37) % 500 - 250;  // детерминированный «перемешанный» поток
+    int k = (i * 37) % 500 - 250;  //  deterministic pseudo-shuffled stream
     s.Insert(k);
     ref.insert(k);
   }
@@ -503,7 +522,7 @@ TEST_F(SortedVectorImplTest, QueryDegenerateAndInvertedRanges) {
 
 TEST_F(SortedVectorImplTest, QueryWhenAllKeysBelowLeft) {
   EXPECT_EQ(set_.Query(10, 20), 0u);
-  EXPECT_EQ(set_.Query(9, 100), 0u);   // lower_bound == end()
+  EXPECT_EQ(set_.Query(9, 100), 0u);  // lower_bound == end()
 }
 
 TEST_F(SortedVectorImplTest, QueryWhenAllKeysAboveRight) {
@@ -554,9 +573,8 @@ TEST(SortedVectorImplMinErrors, ProgErrorCarriesContext) {
     s.Min(1);
     FAIL() << "Ожидалось исключение ProgError";
   } catch (const ProgError& e) {
-    EXPECT_EQ(e.GetErrorInfo().code, ErrorCode::kOutOfRange);
+    EXPECT_EQ(e.GetErrorCode(), ErrorCode::kOutOfRange);
     EXPECT_STREQ(e.what(), "Incorrect index!");
-    EXPECT_EQ(e.GetErrorInfo().func_name, "dynamic_order::SortedVectorImpl::Min");
   }
 }
 
@@ -593,7 +611,8 @@ TEST(SortedVectorImplLessKeysCounter, EmptySetReturnsZero) {
   EXPECT_EQ(s.LessKeysCounter(INT32_MAX), 0u);
 }
 
-TEST(SortedVectorImplLessKeysCounter, DefaultConstructedWithPendingInsertsOnly) {
+TEST(SortedVectorImplLessKeysCounter,
+     DefaultConstructedWithPendingInsertsOnly) {
   SortedVectorImpl s;
   s.Insert(7);
   s.Insert(3);
@@ -604,11 +623,12 @@ TEST(SortedVectorImplLessKeysCounter, DefaultConstructedWithPendingInsertsOnly) 
 
 TEST_F(SortedVectorImplTest, LessKeysCounterIsMonotonic) {
   for (int k = -5; k < 15; ++k) {
-    EXPECT_GE(set_.LessKeysCounter(k + 1), set_.LessKeysCounter(k)) << "k=" << k;
+    EXPECT_GE(set_.LessKeysCounter(k + 1), set_.LessKeysCounter(k))
+        << "k=" << k;
   }
 }
 
-// ------------ Внутренняя согласованность SortedVectorImpl ------------
+//  ------------ SortedVectorImpl internal consistency ------------
 
 TEST_F(SortedVectorImplTest, MinAndLessKeysCounterAreConsistent) {
   for (size_t k = 1; k <= 5; ++k) {
@@ -648,7 +668,7 @@ TEST(SortedVectorImplReference, MatchesStdSetOnGrid) {
 }
 
 // ======================================================================
-// Дифференциальный тест: обе реализации против std::set и друг против друга
+//  Differential test: both impls vs std::set and vs each other
 // ======================================================================
 
 TEST(DynamicOrderDifferential, BothImplsMatchStdSetUnderRandomOperations) {
@@ -663,18 +683,18 @@ TEST(DynamicOrderDifferential, BothImplsMatchStdSetUnderRandomOperations) {
     const int op = step % 5;
     SCOPED_TRACE("step " + std::to_string(step) + ", op " + std::to_string(op));
 
-    if (op == 0 || op == 1) {  // вставка (в т.ч. дубликатов)
+    if (op == 0 || op == 1) {  //  insert (including duplicates)
       const int k = key_dist(rng);
       ref.insert(k);
       set_impl.Insert(k);
       vec_impl.Insert(k);
-    } else if (op == 2) {  // диапазонный запрос
+    } else if (op == 2) {  //  range query
       const int a = key_dist(rng);
       const int b = key_dist(rng);
       const size_t expected = CountInRange(ref, a, b);
       EXPECT_EQ(set_impl.Query(a, b), expected);
       EXPECT_EQ(vec_impl.Query(a, b), expected);
-    } else if (op == 3) {  // порядковая статистика
+    } else if (op == 3) {  //  order statistic
       if (ref.empty()) {
         EXPECT_THROW(set_impl.Min(1), ProgError);
         EXPECT_THROW(vec_impl.Min(1), ProgError);
@@ -683,11 +703,11 @@ TEST(DynamicOrderDifferential, BothImplsMatchStdSetUnderRandomOperations) {
         const int expected = *std::next(ref.begin(), static_cast<long>(k - 1));
         EXPECT_EQ(set_impl.Min(k), expected);
         EXPECT_EQ(vec_impl.Min(k), expected);
-        // заодно выход за границы
+        //  also out-of-range check
         EXPECT_THROW(set_impl.Min(ref.size() + 1), ProgError);
         EXPECT_THROW(vec_impl.Min(ref.size() + 1), ProgError);
       }
-    } else {  // счётчик меньших ключей
+    } else {  //  count of smaller keys
       const int k = key_dist(rng);
       const size_t expected = CountLess(ref, k);
       EXPECT_EQ(set_impl.LessKeysCounter(k), expected);
@@ -695,7 +715,7 @@ TEST(DynamicOrderDifferential, BothImplsMatchStdSetUnderRandomOperations) {
     }
   }
 
-  // Финальная сквозная сверка на накопленном множестве.
+  //  Final end-to-end reconciliation on the accumulated set.
   ASSERT_FALSE(ref.empty());
   EXPECT_EQ(set_impl.Query(INT32_MIN, INT32_MAX), ref.size());
   EXPECT_EQ(vec_impl.Query(INT32_MIN, INT32_MAX), ref.size());
@@ -709,8 +729,8 @@ TEST(DynamicOrderDifferential, BothImplsMatchStdSetUnderRandomOperations) {
 }
 
 TEST(DynamicOrderParity, BothImplsAgreeOnSameData) {
-  // Однаковые данные, разный способ загрузки: set — вставками,
-  // vector — конструктором + вставками вперемешку.
+  //  Same data, different loading: set -- inserts,
+  //  vector -- constructor + interleaved inserts.
   const int vals[] = {4, -8, 15, 15, 16, 23, 42, -8, 99, 4};
   StdSetImpl set_impl;
   for (int v : vals) {
@@ -720,7 +740,7 @@ TEST(DynamicOrderParity, BothImplsAgreeOnSameData) {
   SortedVectorImpl vec_impl{
       std::vector<int>{4, -8, 15, 15, 16, 23, 42, -8, 99, 4}};
   for (int v : vals) {
-    vec_impl.Insert(v);  // повторные вставки не должны менять множество
+    vec_impl.Insert(v);  //  repeated inserts must not change the set
   }
 
   for (int a = -100; a <= 100; a += 13) {
@@ -733,24 +753,24 @@ TEST(DynamicOrderParity, BothImplsAgreeOnSameData) {
     EXPECT_EQ(set_impl.LessKeysCounter(k), vec_impl.LessKeysCounter(k))
         << "k = " << k;
   }
-  for (size_t k = 1; k <= 6; ++k) {  // { -8, 4, 15, 16, 23, 42, 99 } — 7 ключей
+  for (size_t k = 1; k <= 6; ++k) {  //  { -8, 4, 15, 16, 23, 42, 99 } -- 7 keys
     EXPECT_EQ(set_impl.Min(k), vec_impl.Min(k)) << "k = " << k;
   }
 }
 
 // ======================================================================
-// AvlTreeImpl — дополненное AVL-дерево
+//  AvlTreeImpl -- augmented AVL tree
 //
-// Ожидания по ТЗ (идентичны прочим реализациям):
-//   Insert(key)            — множество, дубликаты игнорируются;
-//   Query(left, right)     — количество ключей в (left, right];
-//   Min(index)             — index-я порядковая статистика (с 1),
-//                            ProgError(kOutOfRange) при index==0 или > размера;
-//   LessKeysCounter(key)   — количество ключей строго меньше key.
+//  Expected semantics per spec (identical to other impls):
+//    Insert(key)            -- set semantics, duplicates ignored;
+//    Query(left, right)     -- number of keys in (left, right];
+//    Min(index)             -- index-th order statistic (1-based),
+//                             ProgError(kOutOfRange) when index==0 or > size;
+//    LessKeysCounter(key)   -- number of keys strictly less than key.
 //
-// Тесты намеренно проверяют ЭТАЛОННУЮ семантику: там, где реализация
-// ошибочна, тесты падают (или процесс завершается из-за assert/segfault),
-// указывая конкретные баги.
+//  Tests deliberately check the REFERENCE semantics: where the impl
+//  is wrong, tests fail (or the process dies via assert/segfault),
+//  pointing at concrete bugs.
 // ======================================================================
 
 using dynamic_order::AvlTreeImpl;
@@ -758,7 +778,7 @@ using dynamic_order::AvlTreeImpl;
 class AvlTreeImplTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Сбалансированный порядок вставки — rotations не вызываются:
+    //  Balanced insertion order -- no rotations are triggered:
     //        5
     //       / \
     //      3   7
@@ -772,7 +792,7 @@ class AvlTreeImplTest : public ::testing::Test {
   AvlTreeImpl tree_;
 };
 
-// ------------ Пустое дерево ------------
+//  ------------ Empty tree ------------
 
 TEST(AvlTreeImplEmpty, QueryReturnsZero) {
   AvlTreeImpl t;
@@ -798,9 +818,8 @@ TEST(AvlTreeImplErrors, ProgErrorCarriesContext) {
     t.Min(1);
     FAIL() << "Ожидалось исключение ProgError";
   } catch (const ProgError& e) {
-    EXPECT_EQ(e.GetErrorInfo().code, ErrorCode::kOutOfRange);
+    EXPECT_EQ(e.GetErrorCode(), ErrorCode::kOutOfRange);
     EXPECT_STREQ(e.what(), "Incorrect index!");
-    EXPECT_EQ(e.GetErrorInfo().func_name, "dynamic_order::AvlTreeImpl::Min");
   } catch (const std::exception&) {
     FAIL() << "Ожидался именно ProgError";
   }
@@ -811,22 +830,22 @@ TEST(AvlTreeImplErrors, ProgIsStdException) {
   EXPECT_THROW(t.Min(0), std::exception);
 }
 
-// ------------ Один элемент ------------
+//  ------------ Single element ------------
 
 TEST(AvlTreeImplSingle, Semantics) {
   AvlTreeImpl t;
   t.Insert(42);
   EXPECT_EQ(t.Min(1), 42);
   EXPECT_THROW(t.Min(2), ProgError);
-  EXPECT_EQ(t.Query(41, 42), 1u);   // (41,42]={42}
-  EXPECT_EQ(t.Query(42, 42), 0u);   // вырожденный пуст
-  EXPECT_EQ(t.Query(42, 43), 0u);   // 42 — левый конец
+  EXPECT_EQ(t.Query(41, 42), 1u);  // (41,42]={42}
+  EXPECT_EQ(t.Query(42, 42), 0u);  //  degenerate empty
+  EXPECT_EQ(t.Query(42, 43), 0u);  //  42 is the left border
 }
 
 TEST(AvlTreeImplSingle, LessKeysCounterCountsIt) {
   AvlTreeImpl t;
   t.Insert(42);
-  EXPECT_EQ(t.LessKeysCounter(42), 0u);  // строго меньше 42 — ничего
+  EXPECT_EQ(t.LessKeysCounter(42), 0u);  //  strictly less than 42 -- nothing
   EXPECT_EQ(t.LessKeysCounter(43), 1u);  // 42 < 43
   EXPECT_EQ(t.LessKeysCounter(INT32_MIN), 0u);
 }
@@ -835,9 +854,10 @@ TEST(AvlTreeImplSingle, IntMinElement) {
   AvlTreeImpl t;
   t.Insert(INT32_MIN);
   EXPECT_EQ(t.Min(1), INT32_MIN);
-  EXPECT_EQ(t.Query(INT32_MIN, 0), 0u);  // INT32_MIN — левый конец, не считается
+  EXPECT_EQ(t.Query(INT32_MIN, 0),
+            0u);  //  INT32_MIN is the left border, not counted
   EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN), 0u);
-  EXPECT_EQ(t.LessKeysCounter(0), 1u);   // INT32_MIN < 0
+  EXPECT_EQ(t.LessKeysCounter(0), 1u);  // INT32_MIN < 0
 }
 
 TEST(AvlTreeImplSingle, IntMaxElement) {
@@ -849,15 +869,15 @@ TEST(AvlTreeImplSingle, IntMaxElement) {
 }
 
 TEST_F(AvlTreeImplTest, DuplicatesIgnored) {
-  tree_.Insert(3);   // дубликат (поиск уйдёт влево от корня)
-  tree_.Insert(7);   // дубликат (поиск уйдёт вправо от корня)
-  tree_.Insert(5);   // дубликат корня
+  tree_.Insert(3);  //  duplicate (search goes left of root)
+  tree_.Insert(7);  //  duplicate (search goes right of root)
+  tree_.Insert(5);  //  root duplicate
   EXPECT_EQ(tree_.Query(0, 10), 5u);
   EXPECT_THROW(tree_.Min(6), ProgError);
   EXPECT_EQ(tree_.LessKeysCounter(1), 0u);
 }
 
-// ------------ Query на эталонном дереве ------------
+//  ------------ Query on the reference tree ------------
 
 TEST_F(AvlTreeImplTest, QueryCountsAllKeys) {
   EXPECT_EQ(tree_.Query(0, 10), 5u);
@@ -872,9 +892,9 @@ TEST_F(AvlTreeImplTest, QueryLeftBoundaryIsExcluded) {
 }
 
 TEST_F(AvlTreeImplTest, QueryRightBoundaryIsIncluded) {
-  EXPECT_EQ(tree_.Query(0, 5), 3u);    // 1, 3, 5
-  EXPECT_EQ(tree_.Query(0, 1), 1u);    // 1
-  EXPECT_EQ(tree_.Query(8, 9), 1u);    // 9
+  EXPECT_EQ(tree_.Query(0, 5), 3u);  // 1, 3, 5
+  EXPECT_EQ(tree_.Query(0, 1), 1u);  // 1
+  EXPECT_EQ(tree_.Query(8, 9), 1u);  // 9
 }
 
 TEST_F(AvlTreeImplTest, QueryEmptyAndInvertedRanges) {
@@ -886,16 +906,16 @@ TEST_F(AvlTreeImplTest, QueryEmptyAndInvertedRanges) {
 }
 
 TEST_F(AvlTreeImplTest, QueryInternalRanges) {
-  EXPECT_EQ(tree_.Query(2, 8), 3u);    // 3, 5, 7
-  EXPECT_EQ(tree_.Query(4, 5), 1u);    // 5
-  EXPECT_EQ(tree_.Query(5, 7), 1u);    // 7 (правый конец включается)
-  EXPECT_EQ(tree_.Query(1, 9), 4u);    // 3, 5, 7, 9
+  EXPECT_EQ(tree_.Query(2, 8), 3u);  // 3, 5, 7
+  EXPECT_EQ(tree_.Query(4, 5), 1u);  // 5
+  EXPECT_EQ(tree_.Query(5, 7), 1u);  //  7 (right border included)
+  EXPECT_EQ(tree_.Query(1, 9), 4u);  // 3, 5, 7, 9
 }
 
 TEST_F(AvlTreeImplTest, QueryWithNegativeBounds) {
-  EXPECT_EQ(tree_.Query(-100, 5), 3u);     // 1, 3, 5
-  EXPECT_EQ(tree_.Query(-1000, 1000), 5u); // все
-  EXPECT_EQ(tree_.Query(-5, -1), 0u);      // ключей нет
+  EXPECT_EQ(tree_.Query(-100, 5), 3u);      // 1, 3, 5
+  EXPECT_EQ(tree_.Query(-1000, 1000), 5u);  //  all
+  EXPECT_EQ(tree_.Query(-5, -1), 0u);       //  no keys
 }
 
 // ------------ Min ------------
@@ -918,21 +938,21 @@ TEST_F(AvlTreeImplTest, MinThrowsOnBadIndex) {
 
 TEST_F(AvlTreeImplTest, LessKeysCounterForExistingKeys) {
   EXPECT_EQ(tree_.LessKeysCounter(1), 0u);
-  EXPECT_EQ(tree_.LessKeysCounter(3), 1u);   // {1}
-  EXPECT_EQ(tree_.LessKeysCounter(5), 2u);   // {1, 3}
-  EXPECT_EQ(tree_.LessKeysCounter(7), 3u);   // {1, 3, 5}
-  EXPECT_EQ(tree_.LessKeysCounter(9), 4u);   // {1, 3, 5, 7}
+  EXPECT_EQ(tree_.LessKeysCounter(3), 1u);  // {1}
+  EXPECT_EQ(tree_.LessKeysCounter(5), 2u);  // {1, 3}
+  EXPECT_EQ(tree_.LessKeysCounter(7), 3u);  // {1, 3, 5}
+  EXPECT_EQ(tree_.LessKeysCounter(9), 4u);  // {1, 3, 5, 7}
 }
 
 TEST_F(AvlTreeImplTest, LessKeysCounterForAbsentKeys) {
   EXPECT_EQ(tree_.LessKeysCounter(0), 0u);
-  EXPECT_EQ(tree_.LessKeysCounter(2), 1u);    // {1}
-  EXPECT_EQ(tree_.LessKeysCounter(8), 4u);    // {1,3,5,7}
-  EXPECT_EQ(tree_.LessKeysCounter(10), 5u);   // все
+  EXPECT_EQ(tree_.LessKeysCounter(2), 1u);   // {1}
+  EXPECT_EQ(tree_.LessKeysCounter(8), 4u);   // {1,3,5,7}
+  EXPECT_EQ(tree_.LessKeysCounter(10), 5u);  //  all
   EXPECT_EQ(tree_.LessKeysCounter(INT32_MAX), 5u);
 }
 
-// ------------ Внутренняя согласованность ------------
+//  ------------ Internal consistency ------------
 
 TEST_F(AvlTreeImplTest, MinAndLessKeysCounterAreConsistent) {
   for (size_t k = 1; k <= 5; ++k) {
@@ -950,17 +970,17 @@ TEST_F(AvlTreeImplTest, QueryAndLessKeysCounterIdentity) {
   }
 }
 
-// ------------ Вставки поверх эталонного дерева ------------
+//  ------------ Inserts on top of the reference tree ------------
 
 TEST_F(AvlTreeImplTest, InsertPreservesSemantics) {
-  tree_.Insert(6);  // лист под 7 — баланс-поворотов не требуется
+  tree_.Insert(6);  //  leaf under 7 -- no rebalancing needed
   EXPECT_EQ(tree_.Query(0, 10), 6u);
-  EXPECT_EQ(tree_.Query(5, 7), 2u);   // 6, 7
-  EXPECT_EQ(tree_.Query(4, 6), 2u);   // 5, 6
-  EXPECT_EQ(tree_.Query(6, 8), 1u);   // 7
+  EXPECT_EQ(tree_.Query(5, 7), 2u);  // 6, 7
+  EXPECT_EQ(tree_.Query(4, 6), 2u);  // 5, 6
+  EXPECT_EQ(tree_.Query(6, 8), 1u);  // 7
 }
 
-// ------------ Сценарии, требующие балансировки ------------
+//  ------------ Balancing scenarios ------------
 
 TEST(AvlTreeImplRebalance, SortedAscending) {
   AvlTreeImpl t;
@@ -997,12 +1017,12 @@ TEST(AvlTreeImplRebalance, ZigzagPattern) {
   EXPECT_EQ(t.Min(3), 3);
 }
 
-// ------------ Стресс против std::set ------------
+//  ------------ Stress vs std::set ------------
 
 TEST(AvlTreeImplStress, MatchesStdSetReference) {
   std::mt19937 rng(20261016);
-  std::uniform_int_distribution<int> key_dist(1, 1000);  // положительные,
-  //   чтобы не смешивать баги балансировки с багом знаковых границ в Query
+  std::uniform_int_distribution<int> key_dist(1, 1000);  //  positive keys,
+  //    to keep rebalancing bugs apart from sign-boundary bugs in Query
   AvlTreeImpl t;
   std::set<int> ref;
 
@@ -1022,7 +1042,7 @@ TEST(AvlTreeImplStress, MatchesStdSetReference) {
   }
 }
 
-// ------------ Паритет с эталонной реализацией на std::set ------------
+//  ------------ Parity with the std::set reference implementation ------------
 
 TEST(AvlTreeImplParity, AgreesWithStdSetImpl) {
   AvlTreeImpl avl;
@@ -1047,15 +1067,15 @@ TEST(AvlTreeImplParity, AgreesWithStdSetImpl) {
 }
 
 // ======================================================================
-// AvlTreeImpl — вставка одинаковых ключей
+//  AvlTreeImpl -- inserting duplicate keys
 //
-// Проверка новой функциональности: повторная вставка уже существующего
-// ключа не должна влиять ни на структуру, ни на размер дерева.
-// Размер и структура проверяются по публичному API: Min бросает
-// ProgError при index > размера, порядковые статистики, диапазонные
-// запросы Query и LessKeysCounter сверяются до и после серии
-// дублирующих вставок (в т.ч. на дереве, где новые ключи вызывают
-// балансировку).
+//  Checks the new feature: re-inserting an existing
+//  key must affect neither the structure nor the tree size.
+//  Size and structure are checked via the public API: Min throws
+//  ProgError when index > size; order statistics, range
+//  Query and LessKeysCounter results match before and after a series
+//  of duplicate inserts (incl. on a tree where new keys trigger
+//  rebalancing).
 // ======================================================================
 
 TEST(AvlTreeImplDuplicates, ReinsertedKeyKeepsTreeSizeOne) {
@@ -1064,21 +1084,21 @@ TEST(AvlTreeImplDuplicates, ReinsertedKeyKeepsTreeSizeOne) {
 
   for (int i = 0; i < 10; ++i) {
     t.Insert(42);
-    // Размер остался равен 1 после каждой повторной вставки.
+    //  Size stayed 1 after every repeated insert.
     EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), 1u);
     EXPECT_EQ(t.Min(1), 42);
     EXPECT_THROW(t.Min(2), ProgError);
   }
 
-  // Семантика ключей тоже не изменилась.
-  EXPECT_EQ(t.Query(41, 42), 1u);   // правый конец включается
-  EXPECT_EQ(t.Query(42, 43), 0u);   // левый конец исключается
+  //  Key semantics unchanged as well.
+  EXPECT_EQ(t.Query(41, 42), 1u);  //  right border included
+  EXPECT_EQ(t.Query(42, 43), 0u);  //  left border excluded
   EXPECT_EQ(t.LessKeysCounter(42), 0u);
   EXPECT_EQ(t.LessKeysCounter(43), 1u);
 }
 
 TEST(AvlTreeImplDuplicates, OnlyIdenticalKeysBuildSingleElementTree) {
-  // Набор из только одинаковых ключей: дерево обязано остаться одноэлементным.
+  //  All-identical keys: the tree must remain single-element.
   const int key = 7;
   AvlTreeImpl t;
 
@@ -1086,7 +1106,7 @@ TEST(AvlTreeImplDuplicates, OnlyIdenticalKeysBuildSingleElementTree) {
     t.Insert(key);
     ASSERT_EQ(t.Query(INT32_MIN, INT32_MAX), 1u) << "i = " << i;
     ASSERT_EQ(t.Min(1), key) << "i = " << i;
-    ASSERT_THROW(t.Min(2), ProgError) << "i = " << i;  // второго элемента нет
+    ASSERT_THROW(t.Min(2), ProgError) << "i = " << i;  //  there is no second element
   }
 
   EXPECT_EQ(t.Query(6, 7), 1u);
@@ -1104,31 +1124,31 @@ TEST(AvlTreeImplDuplicates, DuplicateInsertionsDoNotChangeTreeState) {
     ref.insert(key);
   }
 
-  // Снимок observable-состояния до дублирующих вставок.
+  //  Snapshot of the observable state before duplicate inserts.
   std::vector<int> min_before;
   for (size_t k = 1; k <= 5; ++k) {
     min_before.push_back(t.Min(k));
   }
 
-  // Пять полных проходов вставки уже существующих ключей:
-  // корень, внутренние узлы с одним ребёнком и листья.
+  //  Five full passes inserting already-present keys:
+  //  root, single-child internal nodes and leaves.
   for (int round = 0; round < 5; ++round) {
     for (int key : {5, 3, 7, 1, 9}) {
       t.Insert(key);
     }
   }
 
-  // Размер не вырос: шестой порядковой статистики нет.
+  //  Size did not grow: there is no sixth order statistic.
   EXPECT_THROW(t.Min(6), ProgError);
 
-  // Порядковые статистики не изменились.
+  //  Order statistics are unchanged.
   std::vector<int> min_after;
   for (size_t k = 1; k <= 5; ++k) {
     min_after.push_back(t.Min(k));
   }
   EXPECT_EQ(min_before, min_after);
 
-  // Все диапазонные запросы и счётчики меньших ключей — как у std::set.
+  //  All range queries and less-counters match std::set.
   for (int a = 0; a <= 12; ++a) {
     for (int b = a; b <= 12; ++b) {
       EXPECT_EQ(t.Query(a, b), CountInRange(ref, a, b))
@@ -1141,8 +1161,8 @@ TEST(AvlTreeImplDuplicates, DuplicateInsertionsDoNotChangeTreeState) {
 }
 
 TEST(AvlTreeImplDuplicates, DuplicatesAlongsideRebalancingInsertions) {
-  // Каждый ключ вставляется трижды: первая вставка может вызывать
-  // повороты балансировки, последующие — должны игнорироваться.
+  //  Each key is inserted three times: the first insert may trigger
+  //  rebalancing rotations, the rest must be ignored.
   AvlTreeImpl t;
   std::set<int> ref;
   for (int k = 1; k <= 8; ++k) {
@@ -1150,11 +1170,11 @@ TEST(AvlTreeImplDuplicates, DuplicatesAlongsideRebalancingInsertions) {
       t.Insert(k);
     }
     ref.insert(k);
-    // После каждого блока из трёх вставок размер равен числу уникальных ключей.
+    //  After each triple-insert block the size equals the unique key count.
     EXPECT_EQ(t.Query(0, 9), ref.size()) << "k = " << k;
   }
 
-  EXPECT_THROW(t.Min(9), ProgError);  // размер = 8, не 24
+  EXPECT_THROW(t.Min(9), ProgError);  //  size = 8, not 24
   for (size_t k = 1; k <= 8; ++k) {
     EXPECT_EQ(t.Min(k), static_cast<int>(k)) << "k = " << k;
   }
@@ -1169,38 +1189,33 @@ TEST(AvlTreeImplDuplicates, NewKeyAfterDuplicatesCountedOnce) {
     t.Insert(key);
   }
   for (int i = 0; i < 4; ++i) {
-    t.Insert(6);  // ранее отсутствующий ключ: добавляется ровно один раз
+    t.Insert(6);  //  previously absent key: added exactly once
   }
 
   EXPECT_EQ(t.Query(0, 10), 6u);
   EXPECT_THROW(t.Min(7), ProgError);
-  EXPECT_EQ(t.Min(4), 6);  // {1, 3, 5, 6, 7, 9}
+  EXPECT_EQ(t.Min(4), 6);               // {1, 3, 5, 6, 7, 9}
   EXPECT_EQ(t.LessKeysCounter(7), 4u);  // {1, 3, 5, 6}
 }
 
 // ======================================================================
-// BTreeImpl — B-дерево с минимальной степенью t
+//  BTreeImpl -- B-tree with minimum degree t
 //
-// Эталонная семантика идентична прочим реализациям:
-//   Insert(key)            — множество, дубликаты игнорируются;
-//   Query(left, right)     — количество ключей в (left, right];
-//   Min(index)             — index-я порядковая статистика (с 1),
-//                            ProgError(kOutOfRange) при index==0 или > размера;
-//   LessKeysCounter(key)   — количество ключей строго меньше key.
-//
-// Дополнительно покрываются низкоуровневые операции BTreeNode:
-// InsertNonFull (вставка в неполный узел) и SplitChild (деление узла),
-// а также поддержка размера поддерева subtree_sz_.
+//  Reference semantics identical to other impls:
+//    Insert(key)            -- set semantics, duplicates ignored;
+//    Query(left, right)     -- number of keys in (left, right];
+//    Min(index)             -- index-th order statistic (1-based),
+//                             ProgError(kOutOfRange) when index==0 or > size;
+//    LessKeysCounter(key)   -- number of keys strictly less than key.
 // ======================================================================
 
 using dynamic_order::BTreeImpl;
-using dynamic_order::BTreeNode;
 
 class BTreeImplTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    // Пять ключей при t = 2 гарантированно вызывают сплиты:
-    // корень-лист вмещает не более 2t - 1 = 3 ключа.
+    //  Five keys with t = 2 are guaranteed to cause splits:
+    //  a leaf root holds at most 2t - 1 = 3 keys.
     for (int key : {5, 3, 7, 1, 9}) {
       tree_.Insert(key);
     }
@@ -1209,13 +1224,13 @@ class BTreeImplTest : public ::testing::Test {
   BTreeImpl tree_;  // t = kMinDegree = 2
 };
 
-// ------------ Пустое дерево ------------
+//  ------------ Empty tree ------------
 
 TEST(BTreeImplEmpty, QueryReturnsZero) {
   BTreeImpl t;
   EXPECT_EQ(t.Query(-5, 10), 0u);
   EXPECT_EQ(t.Query(0, 0), 0u);
-  EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), 0u);  // путь с right == INT32_MAX
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), 0u);  //  path with right == INT32_MAX
 }
 
 TEST(BTreeImplEmpty, MinThrows) {
@@ -1238,7 +1253,7 @@ TEST(BTreeImplEmpty, FirstInsertSucceeds) {
   EXPECT_EQ(t.Min(1), 1);
 }
 
-// ------------ Ошибки ------------
+//  ------------ Errors ------------
 
 TEST(BTreeImplErrors, ProgErrorCarriesContext) {
   BTreeImpl t;
@@ -1246,9 +1261,8 @@ TEST(BTreeImplErrors, ProgErrorCarriesContext) {
     t.Min(1);
     FAIL() << "Ожидалось исключение ProgError";
   } catch (const ProgError& e) {
-    EXPECT_EQ(e.GetErrorInfo().code, ErrorCode::kOutOfRange);
+    EXPECT_EQ(e.GetErrorCode(), ErrorCode::kOutOfRange);
     EXPECT_STREQ(e.what(), "Incorrect index!");
-    EXPECT_EQ(e.GetErrorInfo().func_name, "dynamic_order::BTreeImpl::Min");
   } catch (const std::exception&) {
     FAIL() << "Ожидался именно ProgError";
   }
@@ -1259,22 +1273,22 @@ TEST(BTreeImplErrors, ProgIsStdException) {
   EXPECT_THROW(t.Min(0), std::exception);
 }
 
-// ------------ Один элемент ------------
+//  ------------ Single element ------------
 
 TEST(BTreeImplSingle, Semantics) {
   BTreeImpl t;
   t.Insert(42);
   EXPECT_EQ(t.Min(1), 42);
   EXPECT_THROW(t.Min(2), ProgError);
-  EXPECT_EQ(t.Query(41, 42), 1u);   // (41,42]={42}
-  EXPECT_EQ(t.Query(42, 42), 0u);   // вырожденный диапазон пуст
-  EXPECT_EQ(t.Query(42, 43), 0u);   // 42 — левый конец
+  EXPECT_EQ(t.Query(41, 42), 1u);  // (41,42]={42}
+  EXPECT_EQ(t.Query(42, 42), 0u);  //  degenerate range is empty
+  EXPECT_EQ(t.Query(42, 43), 0u);  //  42 is the left border
 }
 
 TEST(BTreeImplSingle, LessKeysCounterCountsIt) {
   BTreeImpl t;
   t.Insert(42);
-  EXPECT_EQ(t.LessKeysCounter(42), 0u);  // строго меньше 42 — ничего
+  EXPECT_EQ(t.LessKeysCounter(42), 0u);  //  strictly less than 42 -- nothing
   EXPECT_EQ(t.LessKeysCounter(43), 1u);  // 42 < 43
   EXPECT_EQ(t.LessKeysCounter(INT32_MIN), 0u);
   EXPECT_EQ(t.LessKeysCounter(INT32_MAX), 1u);
@@ -1284,7 +1298,7 @@ TEST(BTreeImplSingle, IntMinElement) {
   BTreeImpl t;
   t.Insert(INT32_MIN);
   EXPECT_EQ(t.Min(1), INT32_MIN);
-  EXPECT_EQ(t.Query(INT32_MIN, 0), 0u);  // левый конец исключается
+  EXPECT_EQ(t.Query(INT32_MIN, 0), 0u);  //  left border excluded
   EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN), 0u);
   EXPECT_EQ(t.LessKeysCounter(0), 1u);
 }
@@ -1293,7 +1307,7 @@ TEST(BTreeImplSingle, IntMaxElement) {
   BTreeImpl t;
   t.Insert(INT32_MAX);
   EXPECT_EQ(t.Min(1), INT32_MAX);
-  EXPECT_EQ(t.Query(INT32_MAX - 1, INT32_MAX), 1u);  // путь через subtree_sz_
+  EXPECT_EQ(t.Query(INT32_MAX - 1, INT32_MAX), 1u);  //  path via subtree_sz_
   EXPECT_EQ(t.LessKeysCounter(INT32_MAX), 0u);
   EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), 1u);
 }
@@ -1313,7 +1327,7 @@ TEST(BTreeImplSingle, ReinsertedKeyKeepsTreeSizeOne) {
   EXPECT_EQ(t.LessKeysCounter(43), 1u);
 }
 
-// ------------ Дубликаты ------------
+//  ------------ Duplicates ------------
 
 TEST(BTreeImplDuplicates, OnlyIdenticalKeysBuildSingleElementTree) {
   const int key = 7;
@@ -1339,14 +1353,14 @@ TEST(BTreeImplDuplicates, DuplicateInsertionsDoNotChangeTreeState) {
     min_before.push_back(t.Min(k));
   }
 
-  // Пять полных проходов повторных вставок: ключи на разных уровнях дерева.
+  //  Five full passes of repeated inserts: keys at different tree levels.
   for (int round = 0; round < 5; ++round) {
     for (int key : {5, 3, 7, 1, 9, 6, 4}) {
       t.Insert(key);
     }
   }
 
-  EXPECT_THROW(t.Min(8), ProgError);  // размер не вырос
+  EXPECT_THROW(t.Min(8), ProgError);  //  size did not grow
   std::vector<int> min_after;
   for (size_t k = 1; k <= ref.size(); ++k) {
     min_after.push_back(t.Min(k));
@@ -1365,7 +1379,7 @@ TEST(BTreeImplDuplicates, DuplicateInsertionsDoNotChangeTreeState) {
 }
 
 TEST(BTreeImplDuplicates, DuplicatesAlongsideSplittingInsertions) {
-  // Каждый ключ вставляется трижды; первые вставки вызывают сплиты.
+  //  Each key is inserted three times; first inserts trigger splits.
   BTreeImpl t;
   std::set<int> ref;
   for (int k = 1; k <= 8; ++k) {
@@ -1376,7 +1390,7 @@ TEST(BTreeImplDuplicates, DuplicatesAlongsideSplittingInsertions) {
     EXPECT_EQ(t.Query(0, 9), ref.size()) << "k = " << k;
   }
 
-  EXPECT_THROW(t.Min(9), ProgError);  // размер = 8, не 24
+  EXPECT_THROW(t.Min(9), ProgError);  //  size = 8, not 24
   for (size_t k = 1; k <= 8; ++k) {
     EXPECT_EQ(t.Min(k), static_cast<int>(k)) << "k = " << k;
   }
@@ -1385,7 +1399,7 @@ TEST(BTreeImplDuplicates, DuplicatesAlongsideSplittingInsertions) {
   }
 }
 
-// ------------ Query на фикстуре {1,3,5,7,9} ------------
+//  ------------ Query on fixture {1,3,5,7,9} ------------
 
 TEST_F(BTreeImplTest, QueryCountsKeysInsideSegment) {
   EXPECT_EQ(tree_.Query(2, 8), 3u);  // 3, 5, 7
@@ -1398,9 +1412,9 @@ TEST_F(BTreeImplTest, QueryCountsAllKeys) {
 }
 
 TEST_F(BTreeImplTest, QueryLeftBoundaryIsExcluded) {
-  EXPECT_EQ(tree_.Query(5, 100), 2u);  // 7, 9 — ключ 5 НЕ считается
-  EXPECT_EQ(tree_.Query(1, 3), 1u);    // только 3
-  EXPECT_EQ(tree_.Query(3, 5), 1u);    // только 5
+  EXPECT_EQ(tree_.Query(5, 100), 2u);  //  7, 9 -- key 5 is NOT counted
+  EXPECT_EQ(tree_.Query(1, 3), 1u);    //  3 only
+  EXPECT_EQ(tree_.Query(3, 5), 1u);    //  5 only
 }
 
 TEST_F(BTreeImplTest, QueryRightBoundaryIsIncluded) {
@@ -1429,8 +1443,8 @@ TEST_F(BTreeImplTest, QueryWorksWithNegativeKeys) {
   for (int key : {-10, -5, 0, 5}) {
     t.Insert(key);
   }
-  EXPECT_EQ(t.Query(-10, 5), 3u);   // -5, 0, 5
-  EXPECT_EQ(t.Query(-6, -1), 1u);   // только -5
+  EXPECT_EQ(t.Query(-10, 5), 3u);  // -5, 0, 5
+  EXPECT_EQ(t.Query(-6, -1), 1u);  //  -5 only
   EXPECT_EQ(t.Query(-10, -10), 0u);
   EXPECT_EQ(t.Query(-9, -5), 1u);
   EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), 4u);
@@ -1441,14 +1455,14 @@ TEST_F(BTreeImplTest, QueryIsStableAcrossRepeatedCalls) {
   EXPECT_EQ(tree_.Query(0, 10), 5u);
 }
 
-// ------------ Min на фикстуре ------------
+//  ------------ Min on fixture ------------
 
 TEST_F(BTreeImplTest, MinReturnsOrderStatistic) {
-  EXPECT_EQ(tree_.Min(1), 1);  // минимум
+  EXPECT_EQ(tree_.Min(1), 1);  //  minimum
   EXPECT_EQ(tree_.Min(2), 3);
   EXPECT_EQ(tree_.Min(3), 5);
   EXPECT_EQ(tree_.Min(4), 7);
-  EXPECT_EQ(tree_.Min(5), 9);  // максимум
+  EXPECT_EQ(tree_.Min(5), 9);  //  maximum
 }
 
 TEST_F(BTreeImplTest, MinThrowsOnBadIndex) {
@@ -1457,13 +1471,13 @@ TEST_F(BTreeImplTest, MinThrowsOnBadIndex) {
   EXPECT_THROW(tree_.Min(100), ProgError);
 }
 
-// ------------ LessKeysCounter на фикстуре ------------
+//  ------------ LessKeysCounter on fixture ------------
 
 TEST_F(BTreeImplTest, LessKeysCounterCountsStrictlyLess) {
   EXPECT_EQ(tree_.LessKeysCounter(1), 0u);
   EXPECT_EQ(tree_.LessKeysCounter(2), 1u);   // {1}
   EXPECT_EQ(tree_.LessKeysCounter(5), 2u);   // {1, 3}
-  EXPECT_EQ(tree_.LessKeysCounter(10), 5u);  // все
+  EXPECT_EQ(tree_.LessKeysCounter(10), 5u);  //  all
   EXPECT_EQ(tree_.LessKeysCounter(INT32_MAX), 5u);
 }
 
@@ -1479,16 +1493,17 @@ TEST_F(BTreeImplTest, LessKeysCounterForVerySmallKey) {
 
 TEST_F(BTreeImplTest, LessKeysCounterIsMonotonic) {
   for (int k = -5; k < 15; ++k) {
-    EXPECT_GE(tree_.LessKeysCounter(k + 1), tree_.LessKeysCounter(k)) << "k=" << k;
+    EXPECT_GE(tree_.LessKeysCounter(k + 1), tree_.LessKeysCounter(k))
+        << "k=" << k;
   }
 }
 
-// ------------ Полная сверка с std::set (хелпер) ------------
+//  ------------ Full reconciliation with std::set (helper) ------------
 
-// Сквозная проверка: Query на сетке, LessKeysCounter на прямой,
-// все порядковые статистики, границы размера.
-void VerifyEquivalence(const BTreeImpl& tree, const std::set<int>& ref,
-                       int lo, int hi) {
+//  End-to-end check: Query on a grid, LessKeysCounter on a line,
+//  all order statistics, size boundaries.
+void VerifyEquivalence(const BTreeImpl& tree, const std::set<int>& ref, int lo,
+                       int hi) {
   EXPECT_EQ(tree.Query(INT32_MIN, INT32_MAX), ref.size());
   for (int a = lo; a <= hi; ++a) {
     for (int b = lo; b <= hi; ++b) {
@@ -1506,10 +1521,10 @@ void VerifyEquivalence(const BTreeImpl& tree, const std::set<int>& ref,
   EXPECT_THROW(tree.Min(ref.size() + 1), ProgError);
 }
 
-// ------------ Сценарии роста со сплитами ------------
+//  ------------ Growth scenarios with splits ------------
 
 TEST(BTreeImplGrowth, SortedAscendingMatchesStdSet) {
-  BTreeImpl t;  // t = 2: сплиты начинаются с 4-го ключа
+  BTreeImpl t;  //  t = 2: splits start at the 4th key
   std::set<int> ref;
   for (int k = 1; k <= 20; ++k) {
     t.Insert(k);
@@ -1541,31 +1556,34 @@ TEST(BTreeImplGrowth, ZigzagMatchesStdSet) {
 TEST(BTreeImplGrowth, MixedSignKeysMatchesStdSet) {
   BTreeImpl t;
   std::set<int> ref;
-  for (int k : {-1000, -1, 0, 1, 1000, -999, 999, -500, 500, INT32_MIN, INT32_MAX, 2}) {
+  for (int k :
+       {-1000, -1, 0, 1, 1000, -999, 999, -500, 500, INT32_MIN, INT32_MAX, 2}) {
     t.Insert(k);
     ref.insert(k);
   }
-  // Глубокая сетка вокруг нуля + знаковые границы.
+  //  Dense grid around zero + sign boundaries.
   for (int a = -1002; a <= 1002; a += 13) {
     for (int b = -1002; b <= 1002; b += 29) {
       EXPECT_EQ(t.Query(a, b), CountInRange(ref, a, b))
           << "range (" << a << ", " << b << "]";
     }
   }
-  EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), ref.size() - 1);  // INT32_MIN — левый конец, исключается
-  EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN + 2), 0u);  // в (min, min+2] ключей нет
-  EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN), 0u);      // вырожденный диапазон
-  EXPECT_EQ(t.LessKeysCounter(INT32_MIN), 0u);       // меньше INT32_MIN ключей нет
-  EXPECT_EQ(t.LessKeysCounter(INT32_MIN + 1), 1u);   // только сам INT32_MIN
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX),
+            ref.size() - 1);  //  INT32_MIN is the left border, excluded
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN + 2),
+            0u);                                 //  no keys in (min, min+2]
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN), 0u);  //  degenerate range
+  EXPECT_EQ(t.LessKeysCounter(INT32_MIN), 0u);   //  no keys below INT32_MIN
+  EXPECT_EQ(t.LessKeysCounter(INT32_MIN + 1), 1u);  //  INT32_MIN itself only
   EXPECT_EQ(t.Min(1), INT32_MIN);
   EXPECT_EQ(t.Min(ref.size()), INT32_MAX);
   EXPECT_EQ(t.LessKeysCounter(INT32_MAX), ref.size() - 1);
 }
 
-// ------------ Разные минимальные степени ------------
+//  ------------ Various minimum degrees ------------
 
 TEST(BTreeImplDegrees, DegreeThree) {
-  BTreeImpl t(3);  // лист вмещает до 5 ключей
+  BTreeImpl t(3);  //  a leaf holds up to 5 keys
   std::set<int> ref;
   const int vals[] = {15, 3, 21, 7, 9, 1, 25, 11, 5, 17, 23, 13, 19, 2, 24};
   for (int k : vals) {
@@ -1576,7 +1594,7 @@ TEST(BTreeImplDegrees, DegreeThree) {
 }
 
 TEST(BTreeImplDegrees, DegreeFourDescending) {
-  BTreeImpl t(4);  // лист вмещает до 7 ключей
+  BTreeImpl t(4);  //  a leaf holds up to 7 keys
   std::set<int> ref;
   for (int k = 30; k >= 1; --k) {
     t.Insert(k);
@@ -1585,7 +1603,7 @@ TEST(BTreeImplDegrees, DegreeFourDescending) {
   VerifyEquivalence(t, ref, 0, 31);
 }
 
-// ------------ Стресс против std::set ------------
+//  ------------ Stress vs std::set ------------
 
 TEST(BTreeImplStress, MatchesStdSetReference) {
   std::mt19937 rng(20261018);
@@ -1615,7 +1633,7 @@ TEST(BTreeImplStress, MatchesStdSetReference) {
   }
 }
 
-// ------------ Паритет со всеми остальными реализациями ------------
+//  ------------ Parity with all other implementations ------------
 
 TEST(BTreeImplParity, AgreesWithStdSetAndAvl) {
   BTreeImpl btree;
@@ -1634,7 +1652,8 @@ TEST(BTreeImplParity, AgreesWithStdSetAndAvl) {
   for (int a = -110; a <= 110; a += 11) {
     for (int b = -110; b <= 110; b += 17) {
       const size_t expected = CountInRange(ref, a, b);
-      EXPECT_EQ(btree.Query(a, b), expected) << "range (" << a << ", " << b << "]";
+      EXPECT_EQ(btree.Query(a, b), expected)
+          << "range (" << a << ", " << b << "]";
       EXPECT_EQ(set_impl.Query(a, b), expected);
       EXPECT_EQ(avl.Query(a, b), expected);
     }
@@ -1649,175 +1668,7 @@ TEST(BTreeImplParity, AgreesWithStdSetAndAvl) {
   }
 }
 
-// ======================================================================
-// BTreeNode — низкоуровневые операции напрямую
-// ======================================================================
-
-TEST(BTreeNodeInsertNonFull, LeafKeepsKeysSorted) {
-  BTreeNode leaf(2);
-  leaf.InsertNonFull(5);
-  leaf.InsertNonFull(9);
-  leaf.InsertNonFull(1);
-  leaf.InsertNonFull(3);
-
-  EXPECT_EQ(leaf.keys_, std::vector<int>({1, 3, 5, 9}));
-  EXPECT_EQ(leaf.subtree_sz_, 4u);
-  EXPECT_TRUE(leaf.leaf_);
-}
-
-TEST(BTreeNodeInsertNonFull, DescendsToCorrectChild) {
-  BTreeNode root(2, /*leaf=*/false);
-  auto* left = new BTreeNode(2);
-  auto* mid = new BTreeNode(2);
-  auto* right = new BTreeNode(2);
-  left->keys_ = {1};
-  mid->keys_ = {16};
-  right->keys_ = {99};
-  for (BTreeNode* child : {left, mid, right}) {
-    child->subtree_sz_ = child->keys_.size();
-  }
-  root.keys_ = {10, 20};
-  root.children_ = {left, mid, right};
-  root.subtree_sz_ = root.keys_.size() + 3;
-
-  root.InsertNonFull(5);   // в left: 5 < 10
-  root.InsertNonFull(15);  // в mid: 10 <= 15 < 20
-  root.InsertNonFull(25);  // в right: 25 >= 20
-
-  EXPECT_EQ(left->keys_, std::vector<int>({1, 5}));
-  EXPECT_EQ(mid->keys_, std::vector<int>({15, 16}));
-  EXPECT_EQ(right->keys_, std::vector<int>({25, 99}));
-  EXPECT_EQ(root.subtree_sz_, 8u);  // 2 ключа узла + 2+2+2 в детях
-}
-
-TEST(BTreeNodeInsertNonFull, SplitsFullChildOnDescent) {
-  BTreeNode root(2, /*leaf=*/false);
-  auto* full = new BTreeNode(2);
-  auto* spare = new BTreeNode(2);
-  full->keys_ = {1, 2, 3};
-  spare->keys_ = {11};
-  full->subtree_sz_ = 3;
-  spare->subtree_sz_ = 1;
-  root.keys_ = {10};
-  root.children_ = {full, spare};
-  root.subtree_sz_ = 5;
-
-  root.InsertNonFull(4);
-  // полный ребёнок {1,2,3} разделился: медиана 2 поднялась в корень,
-  // а 4 ушла в правую половину {3}.
-
-  EXPECT_EQ(root.keys_, std::vector<int>({2, 10}));
-  ASSERT_EQ(root.children_.size(), 3u);
-  EXPECT_EQ(root.children_[0]->keys_, std::vector<int>({1}));
-  EXPECT_EQ(root.children_[1]->keys_, std::vector<int>({3, 4}));
-  EXPECT_EQ(root.children_[2]->keys_, std::vector<int>({11}));
-  EXPECT_EQ(root.subtree_sz_, 6u);
-}
-
-TEST(BTreeNodeSplitChild, SplitsFullLeaf) {
-  BTreeNode parent(2, /*leaf=*/false);
-  auto* child = new BTreeNode(2);
-  child->keys_ = {1, 2, 3};
-  child->subtree_sz_ = 3;
-  parent.children_ = {child};
-
-  parent.SplitChild(0, child);
-
-  EXPECT_EQ(parent.keys_, std::vector<int>({2}));
-  ASSERT_EQ(parent.children_.size(), 2u);
-  EXPECT_EQ(child->keys_, std::vector<int>({1}));
-  EXPECT_EQ(parent.children_[1]->keys_, std::vector<int>({3}));
-
-  EXPECT_TRUE(parent.children_[1]->leaf_);  // признак листа наследуется
-  EXPECT_EQ(child->subtree_sz_, 1u);
-  EXPECT_EQ(parent.children_[1]->subtree_sz_, 1u);
-  EXPECT_EQ(parent.subtree_sz_, 3u);
-  // parent удалит обоих детей в деструкторе.
-}
-
-TEST(BTreeNodeSplitChild, SplitsInternalNodeMovingChildren) {
-  auto* a = new BTreeNode(2);
-  auto* b = new BTreeNode(2);
-  auto* c = new BTreeNode(2);
-  auto* d = new BTreeNode(2);
-  a->keys_ = {1};
-  b->keys_ = {15};
-  c->keys_ = {25};
-  d->keys_ = {35};
-  for (BTreeNode* leaf : {a, b, c, d}) {
-    leaf->subtree_sz_ = 1;
-  }
-
-  auto* child = new BTreeNode(2, /*leaf=*/false);
-  child->keys_ = {10, 20, 30};
-  child->children_ = {a, b, c, d};
-  child->subtree_sz_ = 7;
-
-  BTreeNode parent(2, /*leaf=*/false);
-  parent.children_ = {child};
-
-  parent.SplitChild(0, child);
-
-  EXPECT_EQ(parent.keys_, std::vector<int>({20}));  // медиана поднята
-  ASSERT_EQ(parent.children_.size(), 2u);
-  EXPECT_EQ(child->keys_, std::vector<int>({10}));
-  EXPECT_EQ(parent.children_[1]->keys_, std::vector<int>({30}));
-  EXPECT_FALSE(parent.children_[1]->leaf_);  // leaf_ унаследован от child
-
-  // дети переезжают целиком: [a, b] остались, [c, d] — в новой вершине
-  ASSERT_EQ(child->children_.size(), 2u);
-  EXPECT_EQ(child->children_[0], a);
-  EXPECT_EQ(child->children_[1], b);
-  const auto& right_children = parent.children_[1]->children_;
-  ASSERT_EQ(right_children.size(), 2u);
-  EXPECT_EQ(right_children[0], c);
-  EXPECT_EQ(right_children[1], d);
-
-  EXPECT_EQ(child->subtree_sz_, 3u);   // {10, a, b}
-  EXPECT_EQ(parent.children_[1]->subtree_sz_, 3u);  // {30, c, d}
-  EXPECT_EQ(parent.subtree_sz_, 7u);   // {20} + 3 + 3
-  // parent владеет child и новой вершиной; те — своими внуками.
-}
-
-TEST(BTreeNodeMove, MoveConstructorTransfersOwnership) {
-  auto* src = new BTreeNode(2, /*leaf=*/false);
-  src->keys_ = {5};
-  src->children_.push_back(new BTreeNode(2));
-  src->children_[0]->keys_ = {1};
-  src->children_[0]->subtree_sz_ = 1;
-  src->subtree_sz_ = 2;
-
-  BTreeNode moved(std::move(*src));
-
-  EXPECT_EQ(moved.keys_, std::vector<int>({5}));
-  EXPECT_EQ(moved.subtree_sz_, 2u);
-  EXPECT_FALSE(moved.leaf_);
-  EXPECT_TRUE(src->keys_.empty());
-  EXPECT_TRUE(src->children_.empty());  // владение перешло, src не удалит детей
-  delete src;
-}
-
-TEST(BTreeNodeMove, MoveAssignmentTransfersOwnership) {
-  auto* src = new BTreeNode(2);
-  src->keys_ = {7, 8};
-  src->subtree_sz_ = 2;
-
-  BTreeNode dst(2, /*leaf=*/false);
-  dst.keys_ = {10};
-  dst.children_.push_back(new BTreeNode(2));
-  dst.children_[0]->keys_ = {1};
-  dst.children_[0]->subtree_sz_ = 1;
-
-  dst = std::move(*src);
-
-  EXPECT_EQ(dst.keys_, std::vector<int>({7, 8}));
-  EXPECT_EQ(dst.subtree_sz_, 2u);
-  EXPECT_TRUE(src->keys_.empty());
-  EXPECT_TRUE(src->children_.empty());
-  delete src;  // dst уже не владеет старым ребёнком {1} — тот удалён присваиванием
-}
-
-// ------------ Внутренняя согласованность ------------
+//  ------------ Internal consistency ------------
 
 TEST_F(BTreeImplTest, MinAndLessKeysCounterAreConsistent) {
   for (size_t k = 1; k <= 5; ++k) {
@@ -1835,4 +1686,298 @@ TEST_F(BTreeImplTest, QueryAndLessKeysCounterIdentity) {
     }
   }
 }
+// ======================================================================
+// Strong exception guarantee: alloc-failpoint harness
+// ======================================================================
+//
+//  The global operator new (defined below, at global scope) is armed
+//  by a countdown: the N-th allocation throws std::bad_alloc.
+//  A live-allocation counter guards against leaks
+//  on failure paths. Arming windows are only ScopedAllocBudget around
+//  the checked operation; all gtest macros stay outside armed zones.
+
+std::atomic<std::ptrdiff_t> g_new_budget{-1};  //  -1 = disarmed
+std::atomic<std::size_t> g_alloc_count{0};     //  total allocations since startup
+std::atomic<std::size_t> g_live_allocs{0};     //_alloc - free
+
+bool TakeAllocStep() {
+  std::ptrdiff_t budget = g_new_budget.load(std::memory_order_relaxed);
+  while (budget >= 0) {
+    std::ptrdiff_t next = (budget == 0) ? -1 : budget - 1;
+    if (g_new_budget.compare_exchange_weak(budget, next,
+                                           std::memory_order_relaxed)) {
+      return budget == 0;  //  this allocation must throw
+    }
+  }
+  return false;
+}
+
+class ScopedAllocBudget {
+ public:
+  explicit ScopedAllocBudget(std::ptrdiff_t fail_at_nth) {
+    g_new_budget.store(fail_at_nth, std::memory_order_relaxed);
+  }
+  ScopedAllocBudget(const ScopedAllocBudget&) = delete;
+  ScopedAllocBudget& operator=(const ScopedAllocBudget&) = delete;
+  ~ScopedAllocBudget() {
+    g_new_budget.store(-1, std::memory_order_relaxed);
+  }
+
+ private:
+};
+
+template <typename Fn>
+std::size_t MeasureOpAllocs(Fn&& op) {
+  const std::size_t before = g_alloc_count.load(std::memory_order_relaxed);
+  op();
+  return g_alloc_count.load(std::memory_order_relaxed) - before;
+}
+
+// ---------------- helpers for AVL checks ----------------
+
+using dynamic_order::AvlTreeImpl;
+
+AvlTreeImpl BuildAvl(const std::vector<int>& keys) {
+  AvlTreeImpl tree;
+  for (int key : keys) {
+    tree.Insert(key);
+  }
+  return tree;
+}
+
+//  The tree behaves exactly like ref: cardinality, borders, counters.
+void CheckAvlEquals(const AvlTreeImpl& tree, const std::set<int>& ref,
+                    int lo, int hi) {
+  EXPECT_EQ(tree.Query(lo, hi), ref.size());
+  EXPECT_EQ(tree.LessKeysCounter(lo), CountLess(ref, lo));
+  for (int key : ref) {
+    EXPECT_EQ(tree.LessKeysCounter(key), CountLess(ref, key)) << key;
+    EXPECT_EQ(tree.LessKeysCounter(key + 1),
+              std::distance(ref.begin(), ref.upper_bound(key)));
+  }
+  if (!ref.empty()) {
+    EXPECT_EQ(tree.Min(1), *ref.begin());
+    EXPECT_EQ(tree.Min(ref.size()), *ref.rbegin());
+    EXPECT_THROW(tree.Min(ref.size() + 1), ProgError);
+  }
+}
+
+//  Runs the op failing at each of m allocations (0-based):
+//  * must throw std::bad_alloc (exactly it, not a slice);
+//  * leave no live allocations behind (net leak = 0);
+//  * state_check must pass after every attempt.
+
+// ======================================================================
+//  Insert: strong guarantee
+// ======================================================================
+
+TEST(AvlTreeStrongGuarantee, InsertFailsAtEveryAllocationTreeStaysIntact) {
+  const std::vector<int> base = {5, 2, 8, 1, 4, 7, 9, 3};
+  const int kNew = 6;
+  const std::set<int> ref(base.begin(), base.end());
+
+  //  How many allocations a successful insert costs (Node + nodes_ptr_ growth).
+  AvlTreeImpl probe = BuildAvl(base);
+  const std::size_t m = MeasureOpAllocs([&] { probe.Insert(kNew); });
+  ASSERT_GT(m, std::size_t{0});
+
+  for (std::size_t nth = 0; nth < m; ++nth) {
+    SCOPED_TRACE("fail at alloc #" + std::to_string(nth));
+    AvlTreeImpl tree = BuildAvl(base);
+    const std::size_t live_before = g_live_allocs.load();
+
+    bool caught_bad_alloc = false;
+    bool caught_other = false;
+    {
+      ScopedAllocBudget budget(static_cast<std::ptrdiff_t>(nth));
+      try {
+        tree.Insert(kNew);
+      } catch (const std::bad_alloc&) {
+        caught_bad_alloc = true;
+      } catch (const std::exception&) {
+        caught_other = true;
+      }
+    }
+    EXPECT_TRUE(caught_bad_alloc);
+    EXPECT_FALSE(caught_other) << "bad_alloc was sliced to std::exception";
+    EXPECT_EQ(g_live_allocs.load(), live_before) << "node leaked at #" << nth;
+
+    //  The tree did not budge at all.
+    CheckAvlEquals(tree, ref, -5, 15);
+
+    //  And it is fully usable: the insert succeeds after the failure.
+    tree.Insert(kNew);
+    std::set<int> grown = ref;
+    grown.insert(kNew);
+    CheckAvlEquals(tree, grown, -5, 15);
+  }
+}
+
+// ======================================================================
+//  Copy-ctor: exception propagates, source stays intact
+// ======================================================================
+
+TEST(AvlTreeStrongGuarantee, CopyCtorFailsAtEveryAllocationSourceIntact) {
+  const std::vector<int> base = {5, 2, 8, 1, 4, 7, 9, 3};
+  const std::set<int> ref(base.begin(), base.end());
+  const AvlTreeImpl src = BuildAvl(base);
+
+  AvlTreeImpl probe;
+  const std::size_t m = MeasureOpAllocs([&] { probe = src; });
+  ASSERT_GT(m, std::size_t{1});
+
+  for (std::size_t nth = 0; nth < m; ++nth) {
+    SCOPED_TRACE("fail at alloc #" + std::to_string(nth));
+    const std::size_t live_before = g_live_allocs.load();
+    bool caught_bad_alloc = false;
+    {
+      ScopedAllocBudget budget(static_cast<std::ptrdiff_t>(nth));
+      try {
+        const AvlTreeImpl copy(src);  //  build, then fail right away
+        (void)copy;
+        ADD_FAILURE() << "copy unexpectedly succeeded at #" << nth;
+      } catch (const std::bad_alloc&) {
+        caught_bad_alloc = true;
+      } catch (...) {
+      }
+    }
+    EXPECT_TRUE(caught_bad_alloc) << "exception was swallowed at #" << nth;
+    EXPECT_EQ(g_live_allocs.load(), live_before)
+        << "partial copy leaked at #" << nth;
+    CheckAvlEquals(src, ref, -5, 15);  //  source unharmed
+  }
+
+  //  Without the cutoff the copy succeeds.
+  const AvlTreeImpl copy(src);
+  CheckAvlEquals(copy, ref, -5, 15);
+}
+
+// ======================================================================
+//  Copy-assignment: on failure the target stays as it was
+// ======================================================================
+
+TEST(AvlTreeStrongGuarantee, CopyAssignFailsAtEveryAllocationTargetIntact) {
+  const std::vector<int> target_keys = {50, 40, 60};
+  const std::vector<int> src_keys = {5, 2, 8, 1, 4, 7, 9, 3};
+  const std::set<int> target_ref(target_keys.begin(), target_keys.end());
+  const std::set<int> src_ref(src_keys.begin(), src_keys.end());
+
+  const AvlTreeImpl src = BuildAvl(src_keys);
+  AvlTreeImpl probe = BuildAvl(target_keys);
+  const std::size_t m = MeasureOpAllocs([&] { probe = src; });
+  ASSERT_GT(m, std::size_t{1});
+
+  for (std::size_t nth = 0; nth < m; ++nth) {
+    SCOPED_TRACE("fail at alloc #" + std::to_string(nth));
+    AvlTreeImpl target = BuildAvl(target_keys);
+    const std::size_t live_before = g_live_allocs.load();
+    bool caught_bad_alloc = false;
+    {
+      ScopedAllocBudget budget(static_cast<std::ptrdiff_t>(nth));
+      try {
+        target = src;
+        ADD_FAILURE() << "assign unexpectedly succeeded at #" << nth;
+      } catch (const std::bad_alloc&) {
+        caught_bad_alloc = true;
+      } catch (...) {
+      }
+    }
+    EXPECT_TRUE(caught_bad_alloc) << "exception was swallowed at #" << nth;
+    EXPECT_EQ(g_live_allocs.load(), live_before)
+        << "partial assign leaked at #" << nth;
+    CheckAvlEquals(target, target_ref, -5, 70);  //  target intact, exactly as before
+  }
+
+  //  Successful assignment after all failures.
+  AvlTreeImpl target = BuildAvl(target_keys);
+  target = src;
+  CheckAvlEquals(target, src_ref, -5, 15);
+}
+
+// ======================================================================
+//  Separately: bad_alloc arrives as its own type (regression for `throw e;`)
+// ======================================================================
+
+TEST(AvlTreeStrongGuarantee, FailureTypeIsExactlyBadAlloc) {
+  const std::vector<int> base = {5, 2, 8};
+  AvlTreeImpl tree = BuildAvl(base);
+  std::type_index thrown_type = typeid(void);
+  {
+    ScopedAllocBudget budget(0);
+    try {
+      tree.Insert(1);
+    } catch (const std::exception& e) {
+      thrown_type = typeid(e);
+    }
+  }
+  EXPECT_TRUE(thrown_type == typeid(std::bad_alloc))
+      << "allocation failure escaped as " << thrown_type.name();
+}
+
 }  // namespace
+
+// ======================================================================
+//  Global operator new/delete replacement for the failpoint harness.
+//  Outside ScopedAllocBudget it behaves like the standard one (pass-through malloc).
+// ======================================================================
+
+namespace {
+void* FailpointMalloc(std::size_t size) {
+  void* ptr = std::malloc(size ? size : 1);
+  if (ptr) {
+    g_alloc_count.fetch_add(1, std::memory_order_relaxed);
+    g_live_allocs.fetch_add(1, std::memory_order_relaxed);
+  }
+  return ptr;
+}
+void FailpointFree(void* ptr) {
+  if (ptr) {
+    g_live_allocs.fetch_sub(1, std::memory_order_relaxed);
+    std::free(ptr);
+  }
+}
+}  // namespace
+
+void* operator new(std::size_t size) {
+  if (TakeAllocStep()) {
+    throw std::bad_alloc();
+  }
+  void* ptr = FailpointMalloc(size);
+  if (!ptr) {
+    throw std::bad_alloc();
+  }
+  return ptr;
+}
+
+void* operator new[](std::size_t size) {
+  return ::operator new(size);
+}
+
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept {
+  if (TakeAllocStep()) {
+    return nullptr;
+  }
+  return FailpointMalloc(size);
+}
+
+void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
+  return ::operator new(size, std::nothrow);
+}
+
+void operator delete(void* ptr) noexcept { FailpointFree(ptr); }
+
+void operator delete[](void* ptr) noexcept { operator delete(ptr); }
+
+void operator delete(void* ptr, std::size_t) noexcept { operator delete(ptr); }
+
+void operator delete[](void* ptr, std::size_t) noexcept {
+  operator delete(ptr);
+}
+
+void operator delete(void* ptr, const std::nothrow_t&) noexcept {
+  FailpointFree(ptr);
+}
+
+void operator delete[](void* ptr, const std::nothrow_t&) noexcept {
+  FailpointFree(ptr);
+}
