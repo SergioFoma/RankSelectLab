@@ -20,13 +20,18 @@ bool IsEqual(int first_key, int second_key) {
 
 namespace dynamic_order {
 
+SortedVectorImpl::SortedVectorImpl(std::sorted_unique_t sorted_unique,
+                                   std::vector<int> keys)
+  : keys_(std::move(keys)) {}
+
 void SortedVectorImpl::SortNewKeys() {
   tbb::parallel_sort(keys_.begin() + sort_violation_ind_, keys_.end());
 }
 
-SortedVectorImpl::SortedVectorImpl(std::sorted_unique_t sorted_unique,
-                                   std::vector<int> keys)
-  : keys_(std::move(keys)) {}
+void SortedVectorImpl::RemoveCopies() {
+  auto new_end = std::ranges::unique(keys_).begin();
+  keys_.resize(static_cast<size_t>(new_end - keys_.begin()));
+}
 
 SortedVectorImpl::SortedVectorImpl(std::vector<int> keys)
     : keys_(std::move(keys)) {

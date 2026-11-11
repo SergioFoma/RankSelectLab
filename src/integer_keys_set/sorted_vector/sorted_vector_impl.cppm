@@ -35,12 +35,9 @@ export class SortedVectorImpl {
     }
   }
 
- void SortNewKeys();
+  void SortNewKeys();
 
-  void RemoveCopies() {
-    auto new_end = std::ranges::unique(keys_).begin();
-    keys_.resize(static_cast<size_t>(new_end - keys_.begin()));
-  }
+  void RemoveCopies();
 
   void MergeVectors();
 };
