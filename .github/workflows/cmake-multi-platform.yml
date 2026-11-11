@@ -77,13 +77,23 @@ jobs:
       uses: ilammy/msvc-dev-cmd@v1
 
     # Конфигурация CMake (Linux)
+    # clang на ubuntu-раннерах автоматически берёт самый свежий libstdc++
+    # (сейчас это 15-й, в котором проверка концепта swappable для
+    # std::set внутри views::zip даёт "call to 'swap' is ambiguous" под
+    # clang). Пинкуем clang на libstdc++-14 из установленного g++-14;
+    # gcc-задачи используют std::lib своей версии сами.
     - name: Configure CMake (Linux)
       if: runner.os != 'Windows'
       run: |
+        CLANG_PIN=""
+        if [ "${{ matrix.c_compiler }}" = "clang" ]; then
+          CLANG_PIN="--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/14"
+        fi
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DCMAKE_C_COMPILER=${{ env.CC != '' && env.CC || matrix.c_compiler }} \
           -DCMAKE_CXX_COMPILER=${{ env.CXX != '' && env.CXX || matrix.cpp_compiler }} \
+          -DCMAKE_CXX_FLAGS="$CLANG_PIN" \
           -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
           -DBUILD_TESTS=ON
 
