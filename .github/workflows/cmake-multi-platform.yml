@@ -40,19 +40,15 @@ jobs:
       with:
         submodules: recursive
 
-    # Установка Ninja, TBB и свежего GCC 14 на Linux
+    # Устанавливаем Ninja, TBB и libc++ (для clang-задач: libc++ - тот же
+    # стандарт, что на macOS; libstdc++-15 в связке с clang даёт
+    # "call to 'swap' is ambiguous" на views::zip(std::set)).
+    # Системный gcc на ubuntu-latest >= 15: <flat_set> и sorted_unique_t есть.
     - name: Install Dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build libtbb-dev g++-14 gcc-14
-
-    # Перенаправляем стандартный gcc на gcc-14 для поддержки модулей C++20
-    - name: Set GCC 14 paths
-      if: matrix.c_compiler == 'gcc'
-      run: |
-        echo "CC=gcc-14" >> $GITHUB_ENV
-        echo "CXX=g++-14" >> $GITHUB_ENV
+        sudo apt-get install -y ninja-build libtbb-dev libc++-dev libc++abi-dev
 
     # Установка Ninja и TBB на Windows через vcpkg.
     # GTest ставим тоже через vcpkg: при сборке из FetchContent googletest
@@ -77,23 +73,21 @@ jobs:
       uses: ilammy/msvc-dev-cmd@v1
 
     # Конфигурация CMake (Linux)
-    # clang на ubuntu-раннерах автоматически берёт самый свежий libstdc++
-    # (сейчас это 15-й, в котором проверка концепта swappable для
-    # std::set внутри views::zip даёт "call to 'swap' is ambiguous" под
-    # clang). Пинкуем clang на libstdc++-14 из установленного g++-14;
-    # gcc-задачи используют std::lib своей версии сами.
+    # clang собираем с libc++: libstdc++-14 не знает <flat_set>, а
+    # libstdc++-15+clang ломается на концепте swappable внутри
+    # views::zip. gcc-задачи используют системный libstdc++ своей версии.
     - name: Configure CMake (Linux)
       if: runner.os != 'Windows'
       run: |
-        CLANG_PIN=""
+        CXX_EXTRA=""
         if [ "${{ matrix.c_compiler }}" = "clang" ]; then
-          CLANG_PIN="--gcc-install-dir=/usr/lib/gcc/x86_64-linux-gnu/14"
+          CXX_EXTRA="-stdlib=libc++"
         fi
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -DCMAKE_C_COMPILER=${{ env.CC != '' && env.CC || matrix.c_compiler }} \
-          -DCMAKE_CXX_COMPILER=${{ env.CXX != '' && env.CXX || matrix.cpp_compiler }} \
-          -DCMAKE_CXX_FLAGS="$CLANG_PIN" \
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+          -DCMAKE_CXX_FLAGS="$CXX_EXTRA" \
           -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
           -DBUILD_TESTS=ON
 
