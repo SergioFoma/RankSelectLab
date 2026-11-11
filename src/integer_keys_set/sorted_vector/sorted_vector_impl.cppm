@@ -3,8 +3,6 @@ module;
 #include <cstddef>
 #include <vector>
 #include <flat_set>
-#include <execution>
-#include <tbb/parallel_sort.h>
 
 export module sorted_vector_impl;
 
