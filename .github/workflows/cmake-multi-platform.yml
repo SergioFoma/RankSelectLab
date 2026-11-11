@@ -115,6 +115,8 @@ jobs:
         ./build/tests/unit_tests --gtest_color=no
 
     # Запуск end-to-end тестов (Linux)
+    # e2e требует обязательный -p/--materials-path (с завершающим слэшем:
+    # пути в тесте склеиваются конкатенацией строки с именем файла).
     # e2e возвращает ненулевой код при провале; вывод печатаем для диагностики.
     # Проверка "[FAILED]" оставлена страховкой на случай регрессии кода возврата.
     - name: Run End-to-End Tests (Linux)
@@ -124,7 +126,7 @@ jobs:
           echo "End-to-end tests executable not found"
           exit 1
         fi
-        ./build/tests/end_to_end_tests > e2e_tests.log 2>&1
+        ./build/tests/end_to_end_tests -p materials/ > e2e_tests.log 2>&1
         status=$?
         cat e2e_tests.log
         if [ "$status" -ne 0 ]; then
@@ -153,6 +155,8 @@ jobs:
         }
 
     # Запуск end-to-end тестов (Windows)
+    # e2e требует обязательный -p/--materials-path (с завершающим слэшем:
+    # пути в тесте склеиваются конкатенацией строки с именем файла).
     # e2e возвращает ненулевой код при провале; вывод печатаем для диагностики.
     # Проверка "[FAILED]" оставлена страховкой на случай регрессии кода возврата.
     - name: Run End-to-End Tests (Windows)
@@ -164,7 +168,7 @@ jobs:
           Write-Host "End-to-end tests executable not found"
           exit 1
         }
-        $output = (& $exe 2>&1 | Out-String)
+        $output = (& $exe -p materials/ 2>&1 | Out-String)
         $status = $LASTEXITCODE
         Write-Host $output
         if ($status -ne 0) {
@@ -177,29 +181,37 @@ jobs:
         }
 
     # Запуск программы (Linux)
+    # main требует обязательные --input-file и --struct-type;
+    # прогоняем для всех четырёх структур данных.
     - name: Run Executable (Linux)
       if: runner.os != 'Windows'
       run: |
-        EXE="build/src/target"
+        EXE="build/src/main"
         if [ ! -x "$EXE" ]; then
           echo "Executable not found"
           exit 1
         fi
-        echo "Running $EXE..."
-        "$EXE" --input-file materials/input_100.txt
+        for STRUCT in std_set sorted_vector avl_tree b_tree; do
+          echo "Running $EXE with $STRUCT..."
+          "$EXE" --input-file materials/input_100.txt --struct-type "$STRUCT"
+        done
 
     # Запуск программы (Windows)
+    # main требует обязательные --input-file и --struct-type;
+    # прогоняем для всех четырёх структур данных.
     - name: Run Executable (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        $exe = "build/src/target.exe"
+        $exe = "build/src/main.exe"
         if (-not (Test-Path $exe)) {
           Write-Host "Executable not found"
           exit 1
         }
-        Write-Host "Running $exe..."
-        & $exe --input-file materials/input_100.txt
-        if ($LASTEXITCODE -ne 0) {
-          exit $LASTEXITCODE
+        foreach ($struct in "std_set", "sorted_vector", "avl_tree", "b_tree") {
+          Write-Host "Running $exe with $struct..."
+          & $exe --input-file materials/input_100.txt --struct-type $struct
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
         }
