@@ -115,7 +115,7 @@ int RunCompareResults(
   for (size_t ind = 0; ind < kTestsNumber; ++ind) {
     const std::filesystem::path& output_path = output_data[ind];
     const std::filesystem::path& input_path = input_data[ind];
-    const std::string& input_file = std::filesystem::absolute(input_path);
+    const std::string input_file = std::filesystem::absolute(input_path).string();
 
     std::vector<int64_t> correct_res = ReadCorrectStatuses(output_path);
 
