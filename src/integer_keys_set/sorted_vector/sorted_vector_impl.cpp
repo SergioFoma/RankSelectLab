@@ -20,6 +20,10 @@ bool IsEqual(int first_key, int second_key) {
 
 namespace dynamic_order {
 
+void SortedVectorImpl::SortNewKeys() {
+  tbb::parallel_sort(keys_.begin() + sort_violation_ind_, keys_.end());
+}
+
 SortedVectorImpl::SortedVectorImpl(std::sorted_unique_t sorted_unique,
                                    std::vector<int> keys)
   : keys_(std::move(keys)) {}
@@ -50,14 +54,13 @@ void dynamic_order::SortedVectorImpl::MergeVectors() {
 void dynamic_order::SortedVectorImpl::Insert(int key) {
   bool is_empty = keys_.empty();
   size_t keys_sz = keys_.size();
-  const int& keys_back = keys_.back();
 
   if (is_empty ||
-      (sort_violation_ind_ == keys_sz && keys_back < key)) {
+      (sort_violation_ind_ == keys_sz && keys_[keys_sz - 1] < key)) {
     ++sort_violation_ind_;
   }
 
-  if (is_empty || !IsEqual(key,keys_back)) {
+  if (is_empty || !IsEqual(key, keys_[keys_sz - 1])) {
     keys_.push_back(key);
   }
 }

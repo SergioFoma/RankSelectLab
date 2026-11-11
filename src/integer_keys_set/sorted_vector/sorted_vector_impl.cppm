@@ -35,9 +35,7 @@ export class SortedVectorImpl {
     }
   }
 
-  void SortNewKeys() {
-    tbb::parallel_sort(keys_.begin() + sort_violation_ind_, keys_.end());
-  }
+ void SortNewKeys();
 
   void RemoveCopies() {
     auto new_end = std::ranges::unique(keys_).begin();
