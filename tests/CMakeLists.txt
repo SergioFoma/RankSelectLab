@@ -1,29 +1,18 @@
 include(GoogleTest)
 
-set(UNIT_TESTS unit_tests)
-add_executable(${UNIT_TESTS})
-target_sources(${UNIT_TESTS} PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/unit_tests.cpp
-)
-target_link_libraries(${UNIT_TESTS} PRIVATE GTest::gtest_main algorithms)
+add_executable(unit_tests)
+target_compile_options(unit_tests PRIVATE -Wall -O2)
+target_sources(unit_tests PRIVATE unit_tests.cpp)
+target_link_libraries(unit_tests PRIVATE GTest::gtest_main integer_keys_set)
+gtest_discover_tests(unit_tests)
 
-enable_testing()
-
-set(MODULE_FILES
-  ${MODULES}/integer_keys_set.cppm
-  ${MODULES}/parser.cppm
-  ${MODULES}/configuring_paths.cppm
+set(end_to_end_tests)
+add_executable(end_to_end_tests)
+target_sources(end_to_end_tests PRIVATE end_to_end.cpp)
+target_link_libraries(end_to_end_tests PRIVATE
+  prog_error
+  integer_keys_set
+  parser
+  fmt::fmt
+  CLI11::CLI11
 )
-
-set(END_TO_END_TESTS end_to_end_tests)
-add_executable(${END_TO_END_TESTS})
-target_sources(${END_TO_END_TESTS}
-  PUBLIC
-    FILE_SET CXX_MODULES
-    BASE_DIRS ${MODULES}
-    FILES
-      ${MODULE_FILES}
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/end_to_end.cpp
-)
-target_link_libraries(${END_TO_END_TESTS} PRIVATE algorithms)

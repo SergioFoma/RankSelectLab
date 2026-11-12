@@ -1,22 +1,8 @@
-add_subdirectory(${SRC_ALGORITHMS})
+add_subdirectory(prog_error)
+add_subdirectory(integer_keys_set)
+add_subdirectory(parser)
 
-set(MODULE_FILES
-  ${MODULES}/integer_keys_set.cppm
-  ${MODULES}/parser.cppm
-)
-set(SOURCES
-  ${SRC}/main.cpp
-)
-
-set(TARGET target)
-add_executable(${TARGET})
-target_sources(${TARGET}
-  PUBLIC
-    FILE_SET CXX_MODULES
-    BASE_DIRS ${MODULES}
-    FILES
-      ${MODULE_FILES}
-  PRIVATE
-    ${SOURCES}
-)
-target_link_libraries(${TARGET} PRIVATE algorithms CLI11::CLI11)
+add_executable(main)
+add_compile_options(main PRIVATE -O2 -Wall)
+target_sources(main PRIVATE main.cpp)
+target_link_libraries(main PRIVATE prog_error integer_keys_set parser CLI11::CLI11)

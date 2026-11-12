@@ -40,19 +40,15 @@ jobs:
       with:
         submodules: recursive
 
-    # Установка Ninja, TBB и свежего GCC 14 на Linux
+    # Устанавливаем Ninja, TBB и libc++ (для clang-задач: libc++ - тот же
+    # стандарт, что на macOS; libstdc++-15 в связке с clang даёт
+    # "call to 'swap' is ambiguous" на views::zip(std::set)).
+    # Системный gcc на ubuntu-latest >= 15: <flat_set> и sorted_unique_t есть.
     - name: Install Dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y ninja-build libtbb-dev g++-14 gcc-14
-
-    # Перенаправляем стандартный gcc на gcc-14 для поддержки модулей C++20
-    - name: Set GCC 14 paths
-      if: matrix.c_compiler == 'gcc'
-      run: |
-        echo "CC=gcc-14" >> $GITHUB_ENV
-        echo "CXX=g++-14" >> $GITHUB_ENV
+        sudo apt-get install -y ninja-build libtbb-dev libc++-dev libc++abi-dev
 
     # Установка Ninja и TBB на Windows через vcpkg.
     # GTest ставим тоже через vcpkg: при сборке из FetchContent googletest
@@ -77,13 +73,21 @@ jobs:
       uses: ilammy/msvc-dev-cmd@v1
 
     # Конфигурация CMake (Linux)
+    # clang собираем с libc++: libstdc++-14 не знает <flat_set>, а
+    # libstdc++-15+clang ломается на концепте swappable внутри
+    # views::zip. gcc-задачи используют системный libstdc++ своей версии.
     - name: Configure CMake (Linux)
       if: runner.os != 'Windows'
       run: |
+        CXX_EXTRA=""
+        if [ "${{ matrix.c_compiler }}" = "clang" ]; then
+          CXX_EXTRA="-stdlib=libc++"
+        fi
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-          -DCMAKE_C_COMPILER=${{ env.CC != '' && env.CC || matrix.c_compiler }} \
-          -DCMAKE_CXX_COMPILER=${{ env.CXX != '' && env.CXX || matrix.cpp_compiler }} \
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} \
+          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+          -DCMAKE_CXX_FLAGS="$CXX_EXTRA" \
           -DCMAKE_CXX_SCAN_FOR_MODULES=ON \
           -DBUILD_TESTS=ON
 
@@ -115,6 +119,8 @@ jobs:
         ./build/tests/unit_tests --gtest_color=no
 
     # Запуск end-to-end тестов (Linux)
+    # e2e требует обязательный -p/--materials-path (с завершающим слэшем:
+    # пути в тесте склеиваются конкатенацией строки с именем файла).
     # e2e возвращает ненулевой код при провале; вывод печатаем для диагностики.
     # Проверка "[FAILED]" оставлена страховкой на случай регрессии кода возврата.
     - name: Run End-to-End Tests (Linux)
@@ -124,7 +130,7 @@ jobs:
           echo "End-to-end tests executable not found"
           exit 1
         fi
-        ./build/tests/end_to_end_tests > e2e_tests.log 2>&1
+        ./build/tests/end_to_end_tests -p materials/ > e2e_tests.log 2>&1
         status=$?
         cat e2e_tests.log
         if [ "$status" -ne 0 ]; then
@@ -153,6 +159,8 @@ jobs:
         }
 
     # Запуск end-to-end тестов (Windows)
+    # e2e требует обязательный -p/--materials-path (с завершающим слэшем:
+    # пути в тесте склеиваются конкатенацией строки с именем файла).
     # e2e возвращает ненулевой код при провале; вывод печатаем для диагностики.
     # Проверка "[FAILED]" оставлена страховкой на случай регрессии кода возврата.
     - name: Run End-to-End Tests (Windows)
@@ -164,7 +172,7 @@ jobs:
           Write-Host "End-to-end tests executable not found"
           exit 1
         }
-        $output = (& $exe 2>&1 | Out-String)
+        $output = (& $exe -p materials/ 2>&1 | Out-String)
         $status = $LASTEXITCODE
         Write-Host $output
         if ($status -ne 0) {
@@ -177,29 +185,37 @@ jobs:
         }
 
     # Запуск программы (Linux)
+    # main требует обязательные --input-file и --struct-type;
+    # прогоняем для всех четырёх структур данных.
     - name: Run Executable (Linux)
       if: runner.os != 'Windows'
       run: |
-        EXE="build/src/target"
+        EXE="build/src/main"
         if [ ! -x "$EXE" ]; then
           echo "Executable not found"
           exit 1
         fi
-        echo "Running $EXE..."
-        "$EXE" --input-file materials/input_100.txt
+        for STRUCT in std_set sorted_vector avl_tree b_tree; do
+          echo "Running $EXE with $STRUCT..."
+          "$EXE" --input-file materials/input_100.txt --struct-type "$STRUCT"
+        done
 
     # Запуск программы (Windows)
+    # main требует обязательные --input-file и --struct-type;
+    # прогоняем для всех четырёх структур данных.
     - name: Run Executable (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        $exe = "build/src/target.exe"
+        $exe = "build/src/main.exe"
         if (-not (Test-Path $exe)) {
           Write-Host "Executable not found"
           exit 1
         }
-        Write-Host "Running $exe..."
-        & $exe --input-file materials/input_100.txt
-        if ($LASTEXITCODE -ne 0) {
-          exit $LASTEXITCODE
+        foreach ($struct in "std_set", "sorted_vector", "avl_tree", "b_tree") {
+          Write-Host "Running $exe with $struct..."
+          & $exe --input-file materials/input_100.txt --struct-type $struct
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
         }
