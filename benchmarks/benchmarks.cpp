@@ -1,5 +1,5 @@
-#include <CLI/CLI.hpp>
 #include <benchmark/benchmark.h>
+#include <CLI/CLI.hpp>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -192,9 +192,9 @@ int main(int argc, char** argv) {
   argv = app.ensure_utf8(argv);
   std::string datasets_path;
 
-   app.add_option("-p,--datasets-path,datasets_path", datasets_path,
-                   "The path to folder with datasets")
-        ->required();
+  app.add_option("-p,--datasets-path,datasets_path", datasets_path,
+                 "The path to folder with datasets")
+      ->required();
 
   CLI11_PARSE(app, argc, argv);
 

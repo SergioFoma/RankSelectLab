@@ -1,16 +1,16 @@
+#include <fmt/color.h>
 #include <CLI/CLI.hpp>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
-#include <filesystem>
-#include <cstdio>
-#include <fmt/color.h>
 
 import integer_keys_set;
 import parser;
@@ -21,9 +21,10 @@ namespace {
 constexpr size_t kTestsNumber = 4;
 constexpr size_t kDegree = 5;
 
-enum class TestStatus: int { kCorrect, kError };
+enum class TestStatus : int { kCorrect, kError };
 
-std::vector<int64_t> ReadCorrectStatuses(const std::filesystem::path& file_path) {
+std::vector<int64_t> ReadCorrectStatuses(
+    const std::filesystem::path& file_path) {
   std::ifstream file(file_path, std::ios::binary);
 
   if (!file.is_open()) {
@@ -31,7 +32,8 @@ std::vector<int64_t> ReadCorrectStatuses(const std::filesystem::path& file_path)
                                 prog_error::ErrorCode::kTests};
   }
 
-  std::vector<int64_t> correct_status(std::istream_iterator<int64_t>{file}, std::istream_iterator<int64_t>());
+  std::vector<int64_t> correct_status(std::istream_iterator<int64_t>{file},
+                                      std::istream_iterator<int64_t>());
 
   return correct_status;
 }
@@ -54,10 +56,12 @@ TestStatus ComparingValues(const std::vector<int64_t>& res,
 
   std::cout << "RUNNING:  " << file_name << '\n';
   if (flag) {
-    fmt::print(stdout, "STATUS: {}\n\n", fmt::styled("[PASSED]", fg(fmt::color::green)));
+    fmt::print(stdout, "STATUS: {}\n\n",
+               fmt::styled("[PASSED]", fg(fmt::color::green)));
     return TestStatus::kCorrect;
   } else {
-    fmt::print(stdout, "STATUS: {}\n\n", fmt::styled("[FAILED]", fg(fmt::color::red)));
+    fmt::print(stdout, "STATUS: {}\n\n",
+               fmt::styled("[FAILED]", fg(fmt::color::red)));
     return TestStatus::kError;
   }
 
@@ -71,7 +75,8 @@ TestStatus TestingSet(const std::string& input_file,
 
   std::vector<int64_t> res = parser::ExecuteRequests(input_file, set_impl);
 
-  fmt::print(stdout, "Base: {}", fmt::styled("[StdSet]\n", fg(fmt::color::blue)));
+  fmt::print(stdout, "Base: {}",
+             fmt::styled("[StdSet]\n", fg(fmt::color::blue)));
   return ComparingValues(res, correct_res, input_file);
 }
 
@@ -82,7 +87,8 @@ TestStatus TestingVector(const std::string& input_file,
 
   std::vector<int64_t> res = parser::ExecuteRequests(input_file, vector_impl);
 
-  fmt::print(stdout, "Base: {}\n", fmt::styled("[SortedVector]", fg(fmt::color::blue)));
+  fmt::print(stdout, "Base: {}\n",
+             fmt::styled("[SortedVector]", fg(fmt::color::blue)));
   return ComparingValues(res, correct_res, input_file);
 }
 
@@ -93,7 +99,8 @@ TestStatus TestingAvlTree(const std::string& input_file,
 
   std::vector<int64_t> res = parser::ExecuteRequests(input_file, avl_tree_impl);
 
-  fmt::print(stdout, "Base: {}\n", fmt::styled("[AvlTree]", fg(fmt::color::blue)));
+  fmt::print(stdout, "Base: {}\n",
+             fmt::styled("[AvlTree]", fg(fmt::color::blue)));
   return ComparingValues(res, correct_res, input_file);
 }
 
@@ -104,7 +111,8 @@ TestStatus TestingBTree(const std::string& input_file,
 
   std::vector<int64_t> res = parser::ExecuteRequests(input_file, b_tree_impl);
 
-  fmt::print(stdout, "Base: {}\n", fmt::styled("[BTree]", fg(fmt::color::blue)));
+  fmt::print(stdout, "Base: {}\n",
+             fmt::styled("[BTree]", fg(fmt::color::blue)));
   return ComparingValues(res, correct_res, input_file);
 }
 
@@ -115,24 +123,21 @@ int RunCompareResults(
   for (size_t ind = 0; ind < kTestsNumber; ++ind) {
     const std::filesystem::path& output_path = output_data[ind];
     const std::filesystem::path& input_path = input_data[ind];
-    const std::string input_file = std::filesystem::absolute(input_path).string();
+    const std::string input_file =
+        std::filesystem::absolute(input_path).string();
 
     std::vector<int64_t> correct_res = ReadCorrectStatuses(output_path);
 
-    if (TestingSet(input_file, correct_res) ==
-        TestStatus::kError) {
+    if (TestingSet(input_file, correct_res) == TestStatus::kError) {
       return static_cast<int>(TestStatus::kError);
     }
-    if (TestingVector(input_file, correct_res) ==
-        TestStatus::kError) {
+    if (TestingVector(input_file, correct_res) == TestStatus::kError) {
       return static_cast<int>(TestStatus::kError);
     }
-    if (TestingAvlTree(input_file, correct_res) ==
-        TestStatus::kError) {
+    if (TestingAvlTree(input_file, correct_res) == TestStatus::kError) {
       return static_cast<int>(TestStatus::kError);
     };
-    if (TestingBTree(input_file, correct_res) ==
-        TestStatus::kError) {
+    if (TestingBTree(input_file, correct_res) == TestStatus::kError) {
       return static_cast<int>(TestStatus::kError);
     };
   }
@@ -153,7 +158,6 @@ int main(int argc, char** argv) {
       ->required();
 
   CLI11_PARSE(app, argc, argv);
-
 
   std::array<const std::filesystem::path, kTestsNumber> input_data = {
       materials_path + "input_100.txt", materials_path + "input_1000.txt",

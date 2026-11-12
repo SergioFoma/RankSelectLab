@@ -5,8 +5,8 @@ module;
 #include <climits>
 #include <cstddef>
 #include <memory>
-#include <utility>
 #include <ranges>
+#include <utility>
 
 module b_tree_impl;
 
@@ -16,7 +16,7 @@ namespace {
 bool IsEqual(int first_key, int second_key) {
   return !(first_key < second_key || second_key < first_key);
 }
-} // namespace
+}  // namespace
 
 namespace dynamic_order {
 
@@ -25,7 +25,8 @@ void BTreeNode::SplitChild(size_t child_index, BTreeNode* child) {
   assert(child);
   assert(children[child_index].get() == child);
 
-  std::unique_ptr<BTreeNode, NodeDeleter> new_node{new BTreeNode{child->t, child->leaf}};
+  std::unique_ptr<BTreeNode, NodeDeleter> new_node{
+      new BTreeNode{child->t, child->leaf}};
   size_t t = child->t;
 
   new_node->keys = Move(child->keys, t - 1, child->keys.size());
@@ -50,10 +51,9 @@ void BTreeNode::SplitChild(size_t child_index, BTreeNode* child) {
 
 bool BTreeNode::InsertNonFull(int key) {
   int insert_pos = static_cast<int>(
-    std::distance(keys.begin(), std::ranges::upper_bound(keys, key))
-  );
+      std::distance(keys.begin(), std::ranges::upper_bound(keys, key)));
 
-  if (insert_pos > 0 && IsEqual(key,keys[insert_pos - 1])) {
+  if (insert_pos > 0 && IsEqual(key, keys[insert_pos - 1])) {
     return false;
   }
 
@@ -125,10 +125,10 @@ BTreeImpl& BTreeImpl::operator=(const BTreeImpl& other) {
 void BTreeImpl::RecursiveCopy(BTreeImpl& tree, const BTreeNode* node) {
 
   if (!node) {
-    return ;
+    return;
   }
 
-  for (auto key: node->keys) {
+  for (auto key : node->keys) {
     tree.Insert(key);
   }
 
@@ -141,11 +141,13 @@ void BTreeImpl::RecursiveCopy(BTreeImpl& tree, const BTreeNode* node) {
 void BTreeImpl::Insert(int key) {
 
   if (!root_) {
-    root_ = std::unique_ptr<BTreeNode, BTreeNode::NodeDeleter> {new BTreeNode(t_)};
+    root_ =
+        std::unique_ptr<BTreeNode, BTreeNode::NodeDeleter>{new BTreeNode(t_)};
   }
 
   if (root_->keys.size() == (2 * root_->t - 1)) {
-    std::unique_ptr<BTreeNode, BTreeNode::NodeDeleter> new_node {new BTreeNode(t_)};
+    std::unique_ptr<BTreeNode, BTreeNode::NodeDeleter> new_node{
+        new BTreeNode(t_)};
     new_node->children.insert(new_node->children.begin(), std::move(root_));
     new_node->leaf = false;
     new_node->SplitChild(kRangeBegin, new_node->children.begin()->get());
@@ -201,9 +203,8 @@ size_t BTreeImpl::FindLess(BTreeNode* node, int key) const {
 
   size_t counter = 0;
 
-  size_t first_bigger = static_cast<int>(
-    std::distance(node->keys.begin(), std::ranges::lower_bound(node->keys, key))
-  );
+  size_t first_bigger = static_cast<int>(std::distance(
+      node->keys.begin(), std::ranges::lower_bound(node->keys, key)));
   counter += first_bigger;
 
   if (node->leaf) {
@@ -214,7 +215,8 @@ size_t BTreeImpl::FindLess(BTreeNode* node, int key) const {
     counter += node->children[ind]->subtree_sz;
   }
 
-  if (first_bigger < node->keys.size() && IsEqual(key, node->keys[first_bigger])) {
+  if (first_bigger < node->keys.size() &&
+      IsEqual(key, node->keys[first_bigger])) {
     counter += node->children[first_bigger]->subtree_sz;
   } else {
     counter += FindLess(node->children[first_bigger].get(), key);
@@ -223,8 +225,7 @@ size_t BTreeImpl::FindLess(BTreeNode* node, int key) const {
   return counter;
 }
 
-int BTreeImpl::FindMin(BTreeNode* node, size_t ind,
-                                      size_t& current_ind) const {
+int BTreeImpl::FindMin(BTreeNode* node, size_t ind, size_t& current_ind) const {
 
   assert(node);
 
@@ -249,4 +250,4 @@ int BTreeImpl::FindMin(BTreeNode* node, size_t ind,
 
   return FindMin(node->children[child_ind].get(), ind, current_ind);
 }
-} // namespace dynamic_order
+}  // namespace dynamic_order

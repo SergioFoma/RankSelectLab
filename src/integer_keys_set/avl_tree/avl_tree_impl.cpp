@@ -3,9 +3,9 @@ module;
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
-#include <utility>
 #include <exception>
 #include <memory>
+#include <utility>
 
 module avl_tree_impl;
 
@@ -15,7 +15,7 @@ namespace {
 bool IsEqual(int first_key, int second_key) {
   return !(first_key < second_key || second_key < first_key);
 }
-} // namespace
+}  // namespace
 
 namespace dynamic_order {
 
@@ -43,7 +43,6 @@ AvlTreeImpl& AvlTreeImpl::operator=(const AvlTreeImpl& other) {
 
   return *this;
 }
-
 
 void AvlTreeImpl::RecursiveCopy(AvlTreeImpl& tree, const Node* node) {
 
@@ -113,8 +112,7 @@ void Node::FixHeight() {
 
 size_t Node::GetSubtreeSz(const Node* node) {
 
-  return (node ? node->left_subtree_sz + node->right_subtree_sz + 1
-               : 0);
+  return (node ? node->left_subtree_sz + node->right_subtree_sz + 1 : 0);
 }
 
 void Node::FixSubtreeSz() {
@@ -182,8 +180,8 @@ size_t AvlTreeImpl::LessKeysCounter(int key) const {
   return res.second;
 }
 
-std::pair<Node*, size_t> AvlTreeImpl::FindLess(
-    dynamic_order::Node* node, int key) const {
+std::pair<Node*, size_t> AvlTreeImpl::FindLess(dynamic_order::Node* node,
+                                               int key) const {
 
   if (!node) {
     return {nullptr, 0};
@@ -279,4 +277,4 @@ Node* Node::SmallRightRotation() {
 
   return q;
 }
-} // namespace order
+}  // namespace dynamic_order

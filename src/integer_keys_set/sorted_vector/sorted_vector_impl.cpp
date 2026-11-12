@@ -3,9 +3,8 @@ module;
 #include <tbb/parallel_sort.h>
 #include <algorithm>
 #include <cstddef>
-#include <memory>
-#include <algorithm>
 #include <flat_set>
+#include <memory>
 #include <ranges>
 
 module sorted_vector_impl;
@@ -16,13 +15,13 @@ namespace {
 bool IsEqual(int first_key, int second_key) {
   return !(first_key < second_key || second_key < first_key);
 }
-} // namespace
+}  // namespace
 
 namespace dynamic_order {
 
 SortedVectorImpl::SortedVectorImpl(std::sorted_unique_t sorted_unique,
                                    std::vector<int> keys)
-  : keys_(std::move(keys)) {}
+    : keys_(std::move(keys)) {}
 
 void SortedVectorImpl::SortNewKeys() {
   tbb::parallel_sort(keys_.begin() + sort_violation_ind_, keys_.end());
@@ -47,8 +46,7 @@ void dynamic_order::SortedVectorImpl::MergeVectors() {
 
   SortNewKeys();
 
-  std::inplace_merge(keys_.begin(),
-                     keys_.begin() + sort_violation_ind_,
+  std::inplace_merge(keys_.begin(), keys_.begin() + sort_violation_ind_,
                      keys_.end());
 
   RemoveCopies();
@@ -119,4 +117,4 @@ size_t dynamic_order::SortedVectorImpl::LessKeysCounter(int key) {
 
   return res_distance;
 }
-} // namespace dynamic_order
+}  // namespace dynamic_order
