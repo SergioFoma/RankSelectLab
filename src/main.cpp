@@ -110,6 +110,14 @@ int main(int argc, char** argv) try {
                                            "The min degree for b - tree");
   CLI11_PARSE(app, argc, argv);
 
+  /*
+  #if defined(__cpp_lib_parallel_algorithm) && __cpp_lib_parallel_algorithm >= 201603L
+    std::cout << "Found !\n";
+  #else
+    std::cout << "Not found\n";
+  #endif
+  */
+
   if (FlagsChecking(min_degree, degree_opt, struct_type) !=
       prog_error::ErrorCode::kCorrect) {
     std::println(stderr, "Incorrect use of command line flags");
