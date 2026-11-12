@@ -1,9 +1,9 @@
 module;
 
 #include <cstddef>
+#include <memory>
 #include <utility>
 #include <vector>
-#include <memory>
 
 export module avl_tree_impl;
 
@@ -17,10 +17,8 @@ export struct Node {
   size_t height;
   int key;
 
- struct NodeDeleter {
-    void operator()(Node* node) {
-      delete node;
-    }
+  struct NodeDeleter {
+    void operator()(Node* node) { delete node; }
   };
 
   static constexpr int kPositiveDelta = 2;
@@ -31,12 +29,12 @@ export struct Node {
   explicit Node(const Node& other) = delete;
 
   explicit Node(Node&& other) noexcept
-    : left{std::exchange(other.left, nullptr)},
-      right{std::exchange(other.right, nullptr)},
-      left_subtree_sz{std::exchange(other.left_subtree_sz, 0)},
-      right_subtree_sz{std::exchange(other.right_subtree_sz, 0)},
-      height{std::exchange(other.height, 0)},
-      key{other.key} {}
+      : left{std::exchange(other.left, nullptr)},
+        right{std::exchange(other.right, nullptr)},
+        left_subtree_sz{std::exchange(other.left_subtree_sz, 0)},
+        right_subtree_sz{std::exchange(other.right_subtree_sz, 0)},
+        height{std::exchange(other.height, 0)},
+        key{other.key} {}
 
   Node& operator=(const Node& other) = delete;
 
@@ -78,7 +76,6 @@ export struct Node {
 export class AvlTreeImpl {
  public:
   AvlTreeImpl() = default;
-
 
   AvlTreeImpl(const AvlTreeImpl& other);
 

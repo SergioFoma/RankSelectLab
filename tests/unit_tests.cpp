@@ -243,7 +243,8 @@ TEST(StdSetImplMinErrors, ProgErrorCarriesContext) {
 
 TEST(StdSetImplMinErrors, ProgIsStdException) {
   StdSetImpl s;
-  EXPECT_THROW(s.Min(0), std::exception);  //  ProgError is a std::exception descendant
+  EXPECT_THROW(s.Min(0),
+               std::exception);  //  ProgError is a std::exception descendant
 }
 
 // ------------ LessKeysCounter ------------
@@ -1106,7 +1107,8 @@ TEST(AvlTreeImplDuplicates, OnlyIdenticalKeysBuildSingleElementTree) {
     t.Insert(key);
     ASSERT_EQ(t.Query(INT32_MIN, INT32_MAX), 1u) << "i = " << i;
     ASSERT_EQ(t.Min(1), key) << "i = " << i;
-    ASSERT_THROW(t.Min(2), ProgError) << "i = " << i;  //  there is no second element
+    ASSERT_THROW(t.Min(2), ProgError)
+        << "i = " << i;  //  there is no second element
   }
 
   EXPECT_EQ(t.Query(6, 7), 1u);
@@ -1230,7 +1232,8 @@ TEST(BTreeImplEmpty, QueryReturnsZero) {
   BTreeImpl t;
   EXPECT_EQ(t.Query(-5, 10), 0u);
   EXPECT_EQ(t.Query(0, 0), 0u);
-  EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX), 0u);  //  path with right == INT32_MAX
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX),
+            0u);  //  path with right == INT32_MAX
 }
 
 TEST(BTreeImplEmpty, MinThrows) {
@@ -1571,9 +1574,9 @@ TEST(BTreeImplGrowth, MixedSignKeysMatchesStdSet) {
   EXPECT_EQ(t.Query(INT32_MIN, INT32_MAX),
             ref.size() - 1);  //  INT32_MIN is the left border, excluded
   EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN + 2),
-            0u);                                 //  no keys in (min, min+2]
-  EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN), 0u);  //  degenerate range
-  EXPECT_EQ(t.LessKeysCounter(INT32_MIN), 0u);   //  no keys below INT32_MIN
+            0u);                                    //  no keys in (min, min+2]
+  EXPECT_EQ(t.Query(INT32_MIN, INT32_MIN), 0u);     //  degenerate range
+  EXPECT_EQ(t.LessKeysCounter(INT32_MIN), 0u);      //  no keys below INT32_MIN
   EXPECT_EQ(t.LessKeysCounter(INT32_MIN + 1), 1u);  //  INT32_MIN itself only
   EXPECT_EQ(t.Min(1), INT32_MIN);
   EXPECT_EQ(t.Min(ref.size()), INT32_MAX);
@@ -1697,8 +1700,8 @@ TEST_F(BTreeImplTest, QueryAndLessKeysCounterIdentity) {
 //  the checked operation; all gtest macros stay outside armed zones.
 
 std::atomic<std::ptrdiff_t> g_new_budget{-1};  //  -1 = disarmed
-std::atomic<std::size_t> g_alloc_count{0};     //  total allocations since startup
-std::atomic<std::size_t> g_live_allocs{0};     //_alloc - free
+std::atomic<std::size_t> g_alloc_count{0};  //  total allocations since startup
+std::atomic<std::size_t> g_live_allocs{0};  //_alloc - free
 
 bool TakeAllocStep() {
   std::ptrdiff_t budget = g_new_budget.load(std::memory_order_relaxed);
@@ -1719,9 +1722,7 @@ class ScopedAllocBudget {
   }
   ScopedAllocBudget(const ScopedAllocBudget&) = delete;
   ScopedAllocBudget& operator=(const ScopedAllocBudget&) = delete;
-  ~ScopedAllocBudget() {
-    g_new_budget.store(-1, std::memory_order_relaxed);
-  }
+  ~ScopedAllocBudget() { g_new_budget.store(-1, std::memory_order_relaxed); }
 
  private:
 };
@@ -1746,8 +1747,8 @@ AvlTreeImpl BuildAvl(const std::vector<int>& keys) {
 }
 
 //  The tree behaves exactly like ref: cardinality, borders, counters.
-void CheckAvlEquals(const AvlTreeImpl& tree, const std::set<int>& ref,
-                    int lo, int hi) {
+void CheckAvlEquals(const AvlTreeImpl& tree, const std::set<int>& ref, int lo,
+                    int hi) {
   EXPECT_EQ(tree.Query(lo, hi), ref.size());
   EXPECT_EQ(tree.LessKeysCounter(lo), CountLess(ref, lo));
   for (int key : ref) {
@@ -1838,8 +1839,7 @@ TEST(AvlTreeStrongGuarantee, CopyCtorFailsAtEveryAllocationSourceIntact) {
         ADD_FAILURE() << "copy unexpectedly succeeded at #" << nth;
       } catch (const std::bad_alloc&) {
         caught_bad_alloc = true;
-      } catch (...) {
-      }
+      } catch (...) {}
     }
     EXPECT_TRUE(caught_bad_alloc) << "exception was swallowed at #" << nth;
     EXPECT_EQ(g_live_allocs.load(), live_before)
@@ -1879,13 +1879,13 @@ TEST(AvlTreeStrongGuarantee, CopyAssignFailsAtEveryAllocationTargetIntact) {
         ADD_FAILURE() << "assign unexpectedly succeeded at #" << nth;
       } catch (const std::bad_alloc&) {
         caught_bad_alloc = true;
-      } catch (...) {
-      }
+      } catch (...) {}
     }
     EXPECT_TRUE(caught_bad_alloc) << "exception was swallowed at #" << nth;
     EXPECT_EQ(g_live_allocs.load(), live_before)
         << "partial assign leaked at #" << nth;
-    CheckAvlEquals(target, target_ref, -5, 70);  //  target intact, exactly as before
+    CheckAvlEquals(target, target_ref, -5,
+                   70);  //  target intact, exactly as before
   }
 
   //  Successful assignment after all failures.
@@ -1964,11 +1964,17 @@ void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
   return ::operator new(size, std::nothrow);
 }
 
-void operator delete(void* ptr) noexcept { FailpointFree(ptr); }
+void operator delete(void* ptr) noexcept {
+  FailpointFree(ptr);
+}
 
-void operator delete[](void* ptr) noexcept { operator delete(ptr); }
+void operator delete[](void* ptr) noexcept {
+  operator delete(ptr);
+}
 
-void operator delete(void* ptr, std::size_t) noexcept { operator delete(ptr); }
+void operator delete(void* ptr, std::size_t) noexcept {
+  operator delete(ptr);
+}
 
 void operator delete[](void* ptr, std::size_t) noexcept {
   operator delete(ptr);

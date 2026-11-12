@@ -1,8 +1,8 @@
 module;
 
 #include <cstddef>
-#include <vector>
 #include <flat_set>
+#include <vector>
 
 export module sorted_vector_impl;
 

@@ -2,9 +2,9 @@ module;
 
 #include <cassert>
 #include <cstddef>
+#include <memory>
 #include <utility>
 #include <vector>
-#include <memory>
 
 export module b_tree_impl;
 
@@ -16,9 +16,7 @@ constexpr size_t kRangeBegin = 0;
 struct BTreeNode {
  public:
   struct NodeDeleter {
-    void operator()(BTreeNode* node) {
-      delete node;
-    }
+    void operator()(BTreeNode* node) { delete node; }
   };
 
   std::vector<int> keys;
@@ -66,11 +64,9 @@ struct BTreeNode {
   ~BTreeNode() = default;
 
  private:
-
   // range [l, r)
   template <typename T>
-  static std::vector<T> Move(std::vector<T>& arr, size_t left,
-                             size_t right) {
+  static std::vector<T> Move(std::vector<T>& arr, size_t left, size_t right) {
     std::vector<T> copy(right - left);
 
     for (size_t ind = left; ind < right; ++ind) {
@@ -85,8 +81,7 @@ struct BTreeNode {
 
 export class BTreeImpl {
  public:
-  explicit BTreeImpl(size_t t = kMinDegree)
-    : root_{new BTreeNode(t)}, t_(t) {}
+  explicit BTreeImpl(size_t t = kMinDegree) : root_{new BTreeNode(t)}, t_(t) {}
 
   BTreeImpl(const BTreeImpl& other);
 

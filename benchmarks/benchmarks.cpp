@@ -1,5 +1,5 @@
-#include <CLI/CLI.hpp>
 #include <benchmark/benchmark.h>
+#include <CLI/CLI.hpp>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -186,15 +186,15 @@ class BTreeResearchInfo {
 
 }  // namespace
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) try {
 
   CLI::App app("Benchmarks");
   argv = app.ensure_utf8(argv);
   std::string datasets_path;
 
-   app.add_option("-p,--datasets-path,datasets_path", datasets_path,
-                   "The path to folder with datasets")
-        ->required();
+  app.add_option("-p,--datasets-path,datasets_path", datasets_path,
+                 "The path to folder with datasets")
+      ->required();
 
   CLI11_PARSE(app, argc, argv);
 
@@ -230,4 +230,8 @@ int main(int argc, char** argv) {
 
   benchmark::RunSpecifiedBenchmarks();
   benchmark::Shutdown();
+} catch (const prog_error::ProgError& e) {
+  e.Log();
+  std::println(stderr, "Message: {}", e.what());
+  return static_cast<int>(e.GetErrorCode());
 }

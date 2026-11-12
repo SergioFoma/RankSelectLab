@@ -1,10 +1,10 @@
 module;
 
 #include <cstddef>
-#include <memory>
-#include <utility>
 #include <iterator>
+#include <memory>
 #include <ranges>
+#include <utility>
 
 module std_set_impl;
 
@@ -14,7 +14,7 @@ namespace {
 bool IsEqual(int first_key, int second_key) {
   return !(first_key < second_key || second_key < first_key);
 }
-} // namespace
+}  // namespace
 
 namespace dynamic_order {
 
@@ -54,17 +54,19 @@ int StdSetImpl::Min(size_t index) const {
       filter argument is view::zip pair
   */
 
-  auto view = std::views::zip(std::views::iota(0), keys_) | std::views::filter([&](const auto& tup) {
-    return (std::get<0>(tup) + 1 == index);
-  });
+  auto view = std::views::zip(std::views::iota(0), keys_) |
+              std::views::filter([&](const auto& tup) {
+                return (std::get<0>(tup) + 1 == index);
+              });
 
   return std::get<1>(*view.begin());
 }
 
 size_t StdSetImpl::LessKeysCounter(int key) const {
 
-  size_t counter = static_cast<size_t>(std::distance(keys_.begin(), keys_.lower_bound(key)));
+  size_t counter =
+      static_cast<size_t>(std::distance(keys_.begin(), keys_.lower_bound(key)));
 
   return counter;
 }
-} // namespace dynamic_order
+}  // namespace dynamic_order
